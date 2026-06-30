@@ -167,6 +167,14 @@ export async function advanceRequest(
   const existing = await prisma.request.findUnique({ where: { id: requestId }, include: { history: true } });
   if (!existing) throw new HttpError(404, 'Request not found.');
 
+  // Terminal states cannot be re-opened or re-decided.
+  if (existing.status === 'COMPLETED' || existing.status === 'DECLINED') {
+    throw new HttpError(409, 'This request is already finalized.');
+  }
+  if (existing.status === status) {
+    throw new HttpError(409, `Request is already ${status.toLowerCase().replace('_', ' ')}.`);
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.request.update({ where: { id: requestId }, data: { status } });
     await tx.requestHistory.create({

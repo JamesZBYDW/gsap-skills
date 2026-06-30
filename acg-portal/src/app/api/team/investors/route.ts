@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server';
 import { handle, json, errorJson, clientIp, assertSameOrigin } from '@/lib/http';
 import { apiRequireTeam } from '@/lib/auth';
 import { addInvestorSchema } from '@/lib/validation';
-import { parseMoneyToCents } from '@/lib/money';
 import { addInvestor } from '@/server/lifecycle';
 
 export async function POST(req: NextRequest) {
@@ -13,8 +12,9 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return errorJson(parsed.error.issues[0]?.message ?? 'Invalid input.', 400);
 
     const { name, email, type, principal, termMonths } = parsed.data;
+    // `principal` is already validated + transformed to cents (or null).
     const investor = await addInvestor(
-      { name, email, type, principalCents: principal ? parseMoneyToCents(principal) : null, termMonths },
+      { name, email, type, principalCents: principal, termMonths },
       user.id,
       clientIp(req),
     );

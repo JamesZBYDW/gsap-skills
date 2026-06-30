@@ -24,13 +24,16 @@ export function generateSchedule(
   monthlyAmountCents: number,
 ): GeneratedDistribution[] {
   const first = firstDistributionAfter(wireDate, distributionDay);
+  const baseYear = first.getUTCFullYear();
+  const baseMonth = first.getUTCMonth();
   const out: GeneratedDistribution[] = [];
   for (let i = 0; i < termMonths; i++) {
-    out.push({
-      index: i + 1,
-      dueDate: addMonths(first, i),
-      amountCents: monthlyAmountCents,
-    });
+    // Anchor each occurrence on `distributionDay`, clamped to that month's
+    // length — so a short first month (e.g. Feb) never drifts later months.
+    const monthStart = new Date(Date.UTC(baseYear, baseMonth + i, 1));
+    const lastDay = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)).getUTCDate();
+    monthStart.setUTCDate(Math.min(distributionDay, lastDay));
+    out.push({ index: i + 1, dueDate: monthStart, amountCents: monthlyAmountCents });
   }
   return out;
 }

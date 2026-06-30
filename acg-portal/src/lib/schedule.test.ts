@@ -24,6 +24,18 @@ describe('generateSchedule', () => {
   it('carries the monthly amount', () => {
     expect(schedule.every((d) => d.amountCents === 375_000)).toBe(true);
   });
+
+  it('anchors the distribution day per month without drifting after a short month', () => {
+    // Wire Jan 15, day 31: first month (Feb) clamps to 28, but March must be 31.
+    const s = generateSchedule(utcDate(2025, 0, 15), 5, 31, 1000);
+    expect(s.map((d) => formatDate(d.dueDate))).toEqual([
+      'Feb 28, 2025',
+      'Mar 31, 2025',
+      'Apr 30, 2025',
+      'May 31, 2025',
+      'Jun 30, 2025',
+    ]);
+  });
 });
 
 describe('computeMaturity', () => {

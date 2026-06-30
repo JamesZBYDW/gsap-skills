@@ -3,7 +3,6 @@ import { handle, json, errorJson, clientIp, assertSameOrigin } from '@/lib/http'
 import { prisma } from '@/lib/db';
 import { registerSchema } from '@/lib/validation';
 import { deriveRateBps } from '@/lib/rates';
-import { parseMoneyToCents } from '@/lib/money';
 import { audit } from '@/lib/audit';
 import { rateLimit } from '@/lib/ratelimit';
 
@@ -26,7 +25,8 @@ export async function POST(req: NextRequest) {
     }
 
     const { name, email, type, principal, termMonths, acknowledgedAccredited } = parsed.data;
-    const intendedPrincipalCents = principal ? parseMoneyToCents(principal) : null;
+    // `principal` has already been validated and transformed to cents (or null).
+    const intendedPrincipalCents = principal;
 
     const registration = await prisma.registration.create({
       data: {

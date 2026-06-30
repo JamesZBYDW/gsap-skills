@@ -2,7 +2,7 @@ import 'server-only';
 import type { InvestorState } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { formatUSD, formatCompactUSD, formatRate } from '@/lib/money';
-import { formatDate, daysBetween } from '@/lib/dates';
+import { formatDate, daysBetween, startOfUTCDay } from '@/lib/dates';
 import { investorStateLabel, requestStatusLabel } from '@/lib/labels';
 import { investorStateTone, requestStatusTone, type Tone } from '@/lib/tone';
 import { initials } from '@/lib/display';
@@ -44,9 +44,12 @@ export async function getTeamOverview(now = new Date()): Promise<TeamOverviewVM>
     0,
   );
 
-  const in90 = new Date(now.getTime() + 90 * 86_400_000);
+  // Maturity dates are calendar dates (UTC midnight); compare against the start
+  // of today so a note maturing today is still counted (not dropped by time-of-day).
+  const today = startOfUTCDay(now);
+  const in90 = new Date(today.getTime() + 90 * 86_400_000);
   const maturingNotes = activeNotes
-    .filter((n) => n.maturityDate && n.maturityDate >= now && n.maturityDate <= in90)
+    .filter((n) => n.maturityDate && n.maturityDate >= today && n.maturityDate <= in90)
     .sort((a, b) => a.maturityDate!.getTime() - b.maturityDate!.getTime());
 
   const maturities: MaturityRowVM[] = maturingNotes.map((n) => {
@@ -196,7 +199,7 @@ export async function getThreads(): Promise<ThreadVM[]> {
     },
   });
 
-  const threads: ThreadVM[] = investors
+  const threads = investors
     .filter((i) => i.messages.length > 0)
     .map((i) => {
       const last = i.messages[i.messages.length - 1]!;
@@ -211,6 +214,7 @@ export async function getThreads(): Promise<ThreadVM[]> {
         last: last.text,
         time: formatDate(last.sentAt),
         unread,
+        lastMs: last.sentAt.getTime(),
         messages: i.messages.map((m) => ({
           id: m.id,
           author: m.author,
@@ -220,13 +224,10 @@ export async function getThreads(): Promise<ThreadVM[]> {
         })),
       };
     })
-    .sort((a, b) => {
-      // Newest activity first; unread threads bubble up.
-      if (b.unread !== a.unread) return b.unread - a.unread;
-      return 0;
-    });
+    // Unread threads bubble up; within the same unread count, newest activity first.
+    .sort((a, b) => b.unread - a.unread || b.lastMs - a.lastMs);
 
-  return threads;
+  return threads.map(({ lastMs, ...t }) => t);
 }
 
 export { requestStatusLabel, requestStatusTone };

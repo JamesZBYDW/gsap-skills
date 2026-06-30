@@ -4,6 +4,11 @@
 
 export const MIN_PRINCIPAL_CENTS = 100_000_00; // $100,000 minimum investment
 
+// Upper bound kept below the 32-bit Int column ceiling ($21.47M) to prevent
+// overflow; comfortably above realistic note sizes. Raise this only alongside a
+// migration of principal columns to BigInt.
+export const MAX_PRINCIPAL_CENTS = 2_000_000_000; // $20,000,000
+
 export interface TermOption {
   months: number;
   rateBps: number;
