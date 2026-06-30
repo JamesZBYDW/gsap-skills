@@ -1,0 +1,36 @@
+# Local development stack: Postgres + the portal. For production, run the app
+# image against a managed Postgres (RDS/Cloud SQL/Neon) and set real secrets.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: acg
+      POSTGRES_PASSWORD: acg_dev_password
+      POSTGRES_DB: acg_portal
+    ports:
+      - '5432:5432'
+    volumes:
+      - acg_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U acg -d acg_portal']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://acg:acg_dev_password@db:5432/acg_portal?schema=public
+      SESSION_SECRET: ${SESSION_SECRET:-dev-only-insecure-secret-change-me-0123456789abcdef0123456789abcdef}
+      DOCUMENT_URL_SECRET: ${DOCUMENT_URL_SECRET:-dev-only-doc-secret-change-me}
+      NODE_ENV: production
+      APP_URL: http://localhost:3000
+    ports:
+      - '3000:3000'
+
+volumes:
+  acg_pgdata:

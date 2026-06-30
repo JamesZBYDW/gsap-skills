@@ -1,0 +1,335 @@
+// ACG Investor Portal — data model
+// Money is stored as integer cents to avoid floating-point drift.
+// Rates are stored as basis points (1800 = 18.00%).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────
+
+enum Role {
+  INVESTOR
+  TEAM
+}
+
+enum InvestorType {
+  INDIVIDUAL
+  ENTITY
+}
+
+enum InvestorState {
+  PENDING // self-registered, awaiting team review
+  AWAITING // approved/created, no wire received yet (no schedule)
+  ACTIVE // wire recorded, schedule generated
+  DECLINED
+}
+
+enum NoteStatus {
+  AWAITING
+  ACTIVE
+  MATURED
+  REDEEMED
+}
+
+enum DistributionStatus {
+  PAID
+  NEXT
+  UPCOMING
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+enum RequestType {
+  ADD_CAPITAL
+  UPDATE_BANKING
+  MATURITY_ELECTION
+  DOCUMENT
+  UPDATE_PROFILE
+  NOTIF_PREFS
+  GENERAL
+}
+
+enum RequestStatus {
+  PENDING_REVIEW
+  IN_REVIEW
+  NEEDS_INFO
+  APPROVED
+  COMPLETED
+  DECLINED
+}
+
+enum MessageAuthor {
+  INVESTOR
+  TEAM
+}
+
+enum DocumentKind {
+  STATEMENT
+  SUMMARY
+  TAX
+  AGREEMENT
+}
+
+// ─── Identity & sessions ────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  role         Role
+  name         String
+  email        String   @unique
+  passwordHash String
+  phone        String?
+  // Brute-force protection
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  // 2FA scaffolding (TOTP secret is encrypted at rest when enabled)
+  totpSecret   String?
+  totpEnabled  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  investor     Investor?
+  sessions     Session[]
+  auditLogs    AuditLog[] @relation("ActorAudit")
+  passwordResets PasswordReset[]
+
+  @@index([email])
+}
+
+// Opaque, DB-backed sessions. The cookie holds a random token; only its SHA-256
+// hash is stored, so a DB leak does not expose live session tokens.
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─── Investor & note ──────────────────────────────────────────────────────
+
+model Investor {
+  id        String        @id @default(cuid())
+  legalName String
+  type      InvestorType
+  email     String
+  phone     String?
+  state     InvestorState
+
+  // One login user may be attached (investor-side sign-in). Team-created
+  // investors can exist before a login is provisioned.
+  userId    String?       @unique
+  user      User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Accreditation acknowledgment is a compliance record — persisted with its
+  // confirmation timestamp.
+  accreditationAcknowledged Boolean   @default(false)
+  accreditationConfirmedAt  DateTime?
+
+  w9OnFile  Boolean       @default(false)
+
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  note       Note?
+  banking    BankingDetail?
+  notifPref  NotifPref?
+  requests   Request[]
+  messages   Message[]
+  documents  Document[]
+
+  @@index([state])
+  @@index([email])
+}
+
+model Note {
+  id              String     @id @default(cuid())
+  investorId      String     @unique
+  investor        Investor   @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  principalCents  Int
+  rateBps         Int        // 1800 = 18.00%
+  termMonths      Int
+  monthlyAmountCents Int
+
+  // Null until the firm records the wire. The note "activates" from this date.
+  wireDate        DateTime?
+  firstDistributionDate DateTime?
+  maturityDate    DateTime?
+  distributionDay Int        @default(1)
+
+  status          NoteStatus @default(AWAITING)
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  distributions   Distribution[]
+}
+
+model Distribution {
+  id         String   @id @default(cuid())
+  noteId     String
+  note       Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  index      Int      // 1-based ordinal within the term
+  dueDate    DateTime
+  amountCents Int
+  // Set when the firm posts the distribution. Drives PAID display state.
+  paidDate   DateTime?
+  reference  String?  // e.g. ACH·2407
+
+  @@unique([noteId, index])
+  @@index([noteId])
+}
+
+model BankingDetail {
+  id         String   @id @default(cuid())
+  investorId String   @unique
+  investor   Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  bankName   String
+  last4      String
+  method     String   @default("ACH · monthly")
+  updatedAt  DateTime @updatedAt
+}
+
+model NotifPref {
+  id                 String   @id @default(cuid())
+  investorId         String   @unique
+  investor           Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  distributionPosted Boolean  @default(true)
+  maturityReminder   Boolean  @default(true)
+  newMessage         Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
+}
+
+// ─── Registrations (request-access front door) ──────────────────────────────
+
+model Registration {
+  id                  String             @id @default(cuid())
+  name                String
+  type                InvestorType
+  email               String
+  intendedPrincipalCents Int?
+  termMonths          Int
+  derivedRateBps      Int
+  status              RegistrationStatus @default(PENDING)
+  infoRequested       Boolean            @default(false)
+  acknowledgedAccredited Boolean         @default(false)
+  submittedAt         DateTime           @default(now())
+  reviewedAt          DateTime?
+  reviewedByUserId    String?
+
+  @@index([status])
+}
+
+// ─── Requests ───────────────────────────────────────────────────────────────
+
+model Request {
+  id         String        @id @default(cuid())
+  investorId String
+  investor   Investor      @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  type       RequestType
+  title      String
+  detail     String        @default("")
+  status     RequestStatus @default(PENDING_REVIEW)
+  note       String        @default("") // amber compliance note (e.g. banking)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  history    RequestHistory[]
+
+  @@index([investorId])
+  @@index([status])
+}
+
+model RequestHistory {
+  id        String   @id @default(cuid())
+  requestId String
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  label     String
+  // Free-form date string to preserve copy like "Scheduled Jun 25, 2:30pm ET".
+  dateText  String
+  done      Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
+}
+
+// ─── Messages ────────────────────────────────────────────────────────────────
+
+model Message {
+  id              String        @id @default(cuid())
+  investorId      String        // thread is keyed by investor
+  investor        Investor      @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  author          MessageAuthor
+  authorName      String
+  text            String
+  sentAt          DateTime      @default(now())
+  readByInvestor  Boolean       @default(false)
+  readByTeam      Boolean       @default(false)
+
+  @@index([investorId])
+}
+
+// ─── Documents ────────────────────────────────────────────────────────────────
+
+model Document {
+  id         String       @id @default(cuid())
+  investorId String
+  investor   Investor     @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  name       String
+  kind       DocumentKind
+  issuedDate DateTime
+  // Storage key (S3/GCS object key in production). The portal never serves a
+  // public URL — downloads go through a short-lived signed URL.
+  storageKey String       @default("")
+  createdAt  DateTime     @default(now())
+
+  @@index([investorId])
+}
+
+// ─── Audit log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  actor       User?    @relation("ActorAudit", fields: [actorUserId], references: [id], onDelete: SetNull)
+  action      String   // e.g. AUTH_LOGIN, INVESTOR_STATE_CHANGE, BANKING_EDIT, REGISTRATION_APPROVE
+  targetType  String?
+  targetId    String?
+  metadata    Json?
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  @@index([actorUserId])
+  @@index([action])
+  @@index([createdAt])
+}

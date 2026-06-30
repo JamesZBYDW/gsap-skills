@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.env
+.env*.local
+.prisma-engines
+.scratch
+tests-e2e/.auth
+npm-debug.log*
+README.md
+DEPLOY.md
+DESIGN_BRIEF.md
+DESIGN_HANDOFF.md
