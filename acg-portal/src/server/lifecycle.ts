@@ -6,18 +6,18 @@ import { parseISODate, addDays } from '@/lib/dates';
 import { hashPassword, verifyPassword } from '@/lib/password';
 import { audit } from '@/lib/audit';
 import { HttpError } from '@/lib/http';
-import type { NoteTermsInput, CreateAccountInput } from '@/lib/validation';
+import type { NoteTermsInput, CreateAccountInput, InvestorProfileInput } from '@/lib/validation';
 
 // ─── Investor creation ────────────────────────────────────────────────────
 
 /** Create an investor shell (Awaiting). Note terms + login are set separately. */
 export async function addInvestor(
-  input: { name: string; email: string; type: 'INDIVIDUAL' | 'ENTITY' },
+  input: { name: string; email: string; type: 'INDIVIDUAL' | 'ENTITY'; phone?: string | null },
   actorUserId: string,
   ip: string | null,
 ) {
   const investor = await prisma.investor.create({
-    data: { legalName: input.name, type: input.type, email: input.email, state: 'AWAITING' },
+    data: { legalName: input.name, type: input.type, email: input.email, phone: input.phone ?? null, state: 'AWAITING' },
   });
   await audit({ action: 'INVESTOR_CREATE', actorUserId, targetType: 'Investor', targetId: investor.id, ip });
   return investor;
@@ -39,7 +39,11 @@ export async function createInvestorAccount(
   const clash = await prisma.user.findUnique({ where: { email: loginEmail } });
   if (clash) throw new HttpError(409, 'That login email is already in use.');
 
-  const investor = await addInvestor({ name: input.name, email: input.email, type: input.type }, actorUserId, ip);
+  const investor = await addInvestor(
+    { name: input.name, email: input.email, type: input.type, phone: input.phone },
+    actorUserId,
+    ip,
+  );
   await setNoteTerms(
     investor.id,
     {
@@ -58,6 +62,81 @@ export async function createInvestorAccount(
     ip,
   );
   return investor;
+}
+
+// ─── Profile (management edits what the investor sees on their Profile) ─────
+
+/**
+ * Management updates an investor's profile data: identity/contact details,
+ * banking on file (recorded by management after the phone confirmation the
+ * compliance brief requires), W-9, and the accreditation acknowledgment.
+ */
+export async function updateInvestorProfile(
+  investorId: string,
+  input: InvestorProfileInput,
+  actorUserId: string,
+  ip: string | null,
+) {
+  const investor = await prisma.investor.findUnique({ where: { id: investorId }, include: { banking: true } });
+  if (!investor) throw new HttpError(404, 'Investor not found.');
+
+  const bankingChanged =
+    (input.bankName ?? null) !== (investor.banking?.bankName ?? null) ||
+    (input.bankLast4 ?? null) !== (investor.banking?.last4 ?? null) ||
+    (input.bankMethod ?? investor.banking?.method ?? null) !== (investor.banking?.method ?? null);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.investor.update({
+      where: { id: investorId },
+      data: {
+        legalName: input.name,
+        email: input.email,
+        type: input.type,
+        phone: input.phone,
+        w9OnFile: input.w9OnFile,
+        accreditationAcknowledged: input.accredited,
+        // Keep the original confirmation timestamp; stamp it on first acknowledge.
+        accreditationConfirmedAt: input.accredited
+          ? investor.accreditationConfirmedAt ?? new Date()
+          : null,
+      },
+    });
+    // Keep the linked login's display name in sync (login email is managed
+    // separately via the credentials form).
+    if (investor.userId) {
+      await tx.user.update({ where: { id: investor.userId }, data: { name: input.name } });
+    }
+    if (input.bankName && input.bankLast4) {
+      await tx.bankingDetail.upsert({
+        where: { investorId },
+        create: {
+          investorId,
+          bankName: input.bankName,
+          last4: input.bankLast4,
+          method: input.bankMethod ?? 'ACH · monthly',
+        },
+        update: {
+          bankName: input.bankName,
+          last4: input.bankLast4,
+          method: input.bankMethod ?? investor.banking?.method ?? 'ACH · monthly',
+        },
+      });
+    } else if (investor.banking) {
+      await tx.bankingDetail.delete({ where: { investorId } });
+    }
+  });
+
+  await audit({ action: 'PROFILE_EDIT', actorUserId, targetType: 'Investor', targetId: investorId, ip });
+  if (bankingChanged) {
+    await audit({
+      action: 'BANKING_EDIT',
+      actorUserId,
+      targetType: 'Investor',
+      targetId: investorId,
+      metadata: { bankName: input.bankName, last4: input.bankLast4 },
+      ip,
+    });
+  }
 }
 
 // ─── Note terms (management sets these; drives the investor schedule) ────────

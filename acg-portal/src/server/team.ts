@@ -93,6 +93,18 @@ export interface InvestorRowVM {
     termMonths: number;
     wireReceivedISO: string;
   };
+  // Raw values for the management "Profile" form (prefill).
+  profile: {
+    name: string;
+    email: string;
+    type: 'INDIVIDUAL' | 'ENTITY';
+    phone: string;
+    bankName: string;
+    bankLast4: string;
+    bankMethod: string;
+    w9OnFile: boolean;
+    accredited: boolean;
+  };
 }
 
 const dollars = (cents: number) => String(Math.round(cents) / 100);
@@ -100,7 +112,7 @@ const dollars = (cents: number) => String(Math.round(cents) / 100);
 export async function getInvestorsRoster(now = new Date()): Promise<InvestorRowVM[]> {
   const investors = await prisma.investor.findMany({
     orderBy: { createdAt: 'asc' },
-    include: { note: true, user: { select: { id: true } } },
+    include: { note: true, banking: true, user: { select: { id: true } } },
   });
   const today = startOfUTCDay(now);
   return investors.map((i) => {
@@ -126,6 +138,17 @@ export async function getInvestorsRoster(now = new Date()): Promise<InvestorRowV
         ratePercent: i.note && i.note.rateBps ? String(i.note.rateBps / 100) : '',
         termMonths: i.note && i.note.termMonths ? i.note.termMonths : 24,
         wireReceivedISO: i.note?.wireDate ? toISODate(i.note.wireDate) : '',
+      },
+      profile: {
+        name: i.legalName,
+        email: i.email,
+        type: i.type,
+        phone: i.phone ?? '',
+        bankName: i.banking?.bankName ?? '',
+        bankLast4: i.banking?.last4 ?? '',
+        bankMethod: i.banking?.method ?? '',
+        w9OnFile: i.w9OnFile,
+        accredited: i.accreditationAcknowledged,
       },
     };
   });

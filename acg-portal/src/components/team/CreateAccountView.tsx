@@ -19,6 +19,7 @@ export function CreateAccountView() {
   // Details
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [type, setType] = useState<AccountType>('INDIVIDUAL');
 
   // Note terms
@@ -61,6 +62,7 @@ export function CreateAccountView() {
       await api.post<{ investorId: string }>('/api/team/accounts', {
         name,
         email,
+        phone,
         type,
         loginEmail: effectiveLoginEmail || undefined,
         password,
@@ -93,13 +95,16 @@ export function CreateAccountView() {
               <Field label="CONTACT EMAIL">
                 <input className="fieldLight" data-testid="ca-email" placeholder="investor@example.com" value={email} onChange={(e) => onEmailChange(e.target.value)} />
               </Field>
-              <Field label="ACCOUNT TYPE">
-                <div className="segment" style={{ borderRadius: 9 }}>
-                  <div data-testid="ca-type-individual" className={`segmentItem${type === 'INDIVIDUAL' ? ' active' : ''}`} style={{ padding: 9, borderRadius: 8, fontSize: '.8rem', color: type === 'INDIVIDUAL' ? '#0b1d3a' : '#5b6473' }} onClick={() => setType('INDIVIDUAL')}>Individual</div>
-                  <div data-testid="ca-type-entity" className={`segmentItem${type === 'ENTITY' ? ' active' : ''}`} style={{ padding: 9, borderRadius: 8, fontSize: '.8rem', color: type === 'ENTITY' ? '#0b1d3a' : '#5b6473' }} onClick={() => setType('ENTITY')}>Entity</div>
-                </div>
+              <Field label="PHONE">
+                <input className="fieldLight" data-testid="ca-phone" placeholder="(212) 555-0100" value={phone} onChange={(e) => setPhone(e.target.value)} />
               </Field>
             </div>
+            <Field label="ACCOUNT TYPE">
+              <div className="segment" style={{ borderRadius: 9 }}>
+                <div data-testid="ca-type-individual" className={`segmentItem${type === 'INDIVIDUAL' ? ' active' : ''}`} style={{ padding: 9, borderRadius: 8, fontSize: '.8rem', color: type === 'INDIVIDUAL' ? '#0b1d3a' : '#5b6473' }} onClick={() => setType('INDIVIDUAL')}>Individual</div>
+                <div data-testid="ca-type-entity" className={`segmentItem${type === 'ENTITY' ? ' active' : ''}`} style={{ padding: 9, borderRadius: 8, fontSize: '.8rem', color: type === 'ENTITY' ? '#0b1d3a' : '#5b6473' }} onClick={() => setType('ENTITY')}>Entity</div>
+              </div>
+            </Field>
           </div>
         </div>
 

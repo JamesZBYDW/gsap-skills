@@ -5,6 +5,7 @@ import {
   credentialsSchema,
   passwordChangeSchema,
   firstPasswordSchema,
+  investorProfileSchema,
 } from './validation';
 
 const baseCreate = {
@@ -82,6 +83,31 @@ describe('noteTermsSchema', () => {
     if (r.success) {
       expect(r.data.wireReceivedDate).toBeNull();
     }
+  });
+});
+
+describe('investorProfileSchema (management edits investor profile)', () => {
+  const base = { name: 'Crest Harbor Holdings', email: 'admin@crestharbor.com', type: 'ENTITY' as const };
+  it('accepts identity + phone; blanks become null', () => {
+    const r = investorProfileSchema.safeParse({ ...base, phone: '(917) 555-0142' });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.phone).toBe('(917) 555-0142');
+      expect(r.data.bankName).toBeNull();
+      expect(r.data.bankLast4).toBeNull();
+      expect(r.data.w9OnFile).toBe(false);
+    }
+  });
+  it('requires bank name and last-4 together, with last-4 exactly 4 digits', () => {
+    expect(investorProfileSchema.safeParse({ ...base, bankName: 'Chase', bankLast4: '6042' }).success).toBe(true);
+    expect(investorProfileSchema.safeParse({ ...base, bankName: 'Chase' }).success).toBe(false);
+    expect(investorProfileSchema.safeParse({ ...base, bankLast4: '6042' }).success).toBe(false);
+    expect(investorProfileSchema.safeParse({ ...base, bankName: 'Chase', bankLast4: '60' }).success).toBe(false);
+    expect(investorProfileSchema.safeParse({ ...base, bankName: 'Chase', bankLast4: 'abcd' }).success).toBe(false);
+  });
+  it('rejects an invalid contact email or too-short name', () => {
+    expect(investorProfileSchema.safeParse({ ...base, email: 'nope' }).success).toBe(false);
+    expect(investorProfileSchema.safeParse({ ...base, name: 'X' }).success).toBe(false);
   });
 });
 

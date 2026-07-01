@@ -82,11 +82,18 @@ test('management sets terms + login on an existing investor; they sign in and se
   await page.getByTestId('mn-save').click();
   await expect(page.getByText('Note terms saved — schedule updated')).toBeVisible();
 
-  // Provision a login the investor can use — leave them not forced to change it.
+  // Management edits the profile data the investor sees (phone + banking).
   await page.getByText('Crest Harbor Holdings').first().click();
+  await page.getByTestId('mp-phone').fill('(917) 555-0142');
+  await page.getByTestId('mp-bank').fill('Chase');
+  await page.getByTestId('mp-last4').fill('6042');
+  await page.getByTestId('mp-save').click();
+  await expect(page.getByText('Profile saved — the investor sees this on their Profile page')).toBeVisible();
+
+  // Provision a login the investor can use — leave them not forced to change it.
   await page.getByTestId('cred-email').fill(email);
   await page.getByTestId('cred-password').fill(password);
-  await page.getByRole('checkbox').uncheck();
+  await page.getByRole('checkbox', { name: /change it after first sign-in/ }).uncheck();
   await page.getByTestId('cred-save').click();
   await expect(page.getByText(/Login set/)).toBeVisible();
 
@@ -102,6 +109,12 @@ test('management sets terms + login on an existing investor; they sign in and se
   // overview page.
   await expect(page.getByText('Aug 31, 2026').first()).toBeVisible();
   await expect(page.getByText('$9,375').first()).toBeVisible();
+
+  // The profile data management entered is what the investor sees.
+  await page.getByRole('link', { name: 'Profile' }).click();
+  await page.waitForURL('**/portal/profile');
+  await expect(page.getByText('(917) 555-0142')).toBeVisible();
+  await expect(page.getByText('Chase ••••6042')).toBeVisible();
 });
 
 // Signature loop B: management creates a whole account in one step (details +
@@ -120,6 +133,7 @@ test('management creates an account; investor is forced to set a password, then 
 
   await page.getByTestId('ca-name').fill('Northwind Partners');
   await page.getByTestId('ca-email').fill(contact);
+  await page.getByTestId('ca-phone').fill('(646) 555-0107');
   await page.getByTestId('ca-type-entity').click();
   await page.getByTestId('ca-principal').fill('600,000');
   await page.getByTestId('ca-rate').fill('15');
@@ -152,6 +166,13 @@ test('management creates an account; investor is forced to set a password, then 
   // directly on the overview page.
   await expect(page.getByText('Oct 1, 2026').first()).toBeVisible();
   await expect(page.getByText('$7,500').first()).toBeVisible();
+
+  // The phone management entered at creation shows on the investor's Profile.
+  await page.getByRole('link', { name: 'Profile' }).click();
+  await page.waitForURL('**/portal/profile');
+  await expect(page.getByText('(646) 555-0107')).toBeVisible();
+  await page.getByRole('link', { name: 'Overview' }).click();
+  await page.waitForURL('**/portal/overview');
 
   // The new password sticks: sign out and back in with it, no forced screen.
   await page.getByRole('button', { name: 'Sign out' }).click();

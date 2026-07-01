@@ -64,6 +64,17 @@ const passwordField = z
     message: 'Password must include both letters and numbers.',
   });
 
+// Optional free-form phone; blank → null.
+const phoneField = z
+  .string()
+  .max(40)
+  .optional()
+  .default('')
+  .transform((v) => {
+    const t = (v ?? '').trim();
+    return t.length ? t : null;
+  });
+
 // Management sets the note terms; drives the investor's schedule. Everything
 // else is DERIVED server-side: amount = principal × rate ÷ 12, first
 // distribution = wire + 30 days, maturity = wire + term, and status flips to
@@ -89,6 +100,7 @@ export const createAccountSchema = z.object({
   name: z.string().trim().min(2, 'Enter a legal name or entity.').max(200),
   email: z.string().email('Enter a valid email.').max(320),
   type: z.enum(['INDIVIDUAL', 'ENTITY']).default('INDIVIDUAL'),
+  phone: phoneField,
   // Login credentials (email defaults to the contact email when omitted).
   loginEmail: z.string().email('Enter a valid login email.').max(320).optional(),
   password: passwordField,
@@ -100,6 +112,40 @@ export const createAccountSchema = z.object({
   termMonths: termMonthsField.default(24),
   wireReceivedDate: isoDate,
 });
+
+// Management edits an investor's profile data (what the investor sees on their
+// Profile page): identity/contact details, banking on file (changes are
+// phone-confirmed per compliance before management records them), W-9, and the
+// accreditation acknowledgment.
+export const investorProfileSchema = z
+  .object({
+    name: z.string().trim().min(2, 'Enter a legal name or entity.').max(200),
+    email: z.string().email('Enter a valid email.').max(320),
+    type: z.enum(['INDIVIDUAL', 'ENTITY']),
+    phone: phoneField,
+    bankName: z.string().trim().max(80).optional().default('').transform((v) => (v.trim().length ? v.trim() : null)),
+    bankLast4: z
+      .string()
+      .trim()
+      .max(4)
+      .optional()
+      .default('')
+      .transform((v, ctx) => {
+        const t = v.trim();
+        if (!t) return null;
+        if (!/^\d{4}$/.test(t)) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Account last-4 must be exactly 4 digits.' });
+          return z.NEVER;
+        }
+        return t;
+      }),
+    bankMethod: z.string().trim().max(60).optional().default('').transform((v) => (v.trim().length ? v.trim() : null)),
+    w9OnFile: z.boolean().optional().default(false),
+    accredited: z.boolean().optional().default(false),
+  })
+  .refine((v) => (v.bankName === null) === (v.bankLast4 === null), {
+    message: 'Banking needs both a bank name and the account last-4.',
+  });
 
 // Investor changes their own password (from Profile).
 export const passwordChangeSchema = z.object({
@@ -123,3 +169,4 @@ export const impersonateSchema = z.object({
 
 export type NoteTermsInput = z.infer<typeof noteTermsSchema>;
 export type CreateAccountInput = z.infer<typeof createAccountSchema>;
+export type InvestorProfileInput = z.infer<typeof investorProfileSchema>;

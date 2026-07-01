@@ -48,8 +48,12 @@ account, and out-of-band contact (email/phone) is used for anything conversation
 ### Accounts, logins & note terms (management-driven)
 
 - **Management creates the whole account** from the **Create account** tab in one
-  step: investor details, note terms, and the sign-in credentials the investor
-  will use.
+  step: investor details (name, contact email, phone, type), note terms, and the
+  sign-in credentials the investor will use.
+- **Management owns the investor's profile data.** Everything the investor sees
+  read-only on their Profile page — identity, phone, banking on file (recorded
+  after the phone confirmation compliance requires), W-9, accreditation — is
+  entered at creation or edited later from the investor's detail panel.
 - **Investor logins are provisioned by management** (from Create account, or later
   from an investor's detail panel): a login email + an initial password (or a
   generated one), hashed and persisted for real sign-in. On their **first sign-in**

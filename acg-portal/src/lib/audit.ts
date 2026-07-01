@@ -12,6 +12,7 @@ export type AuditAction =
   | 'NOTE_TERMS_SET'
   | 'CREDENTIALS_SET'
   | 'PASSWORD_CHANGE'
+  | 'PROFILE_EDIT'
   | 'BANKING_EDIT'
   | 'NOTIF_PREF_CHANGE'
   | 'DOCUMENT_DOWNLOAD'

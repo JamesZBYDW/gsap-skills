@@ -106,6 +106,42 @@ function InvestorDetail({
   const [mustChange, setMustChange] = useState(true);
   const [credBusy, setCredBusy] = useState(false);
 
+  // Profile (what the investor sees on their Profile page — management edits it).
+  const pf = investor.profile;
+  const [pName, setPName] = useState(pf.name);
+  const [pEmail, setPEmail] = useState(pf.email);
+  const [pType, setPType] = useState<'INDIVIDUAL' | 'ENTITY'>(pf.type);
+  const [pPhone, setPPhone] = useState(pf.phone);
+  const [pBank, setPBank] = useState(pf.bankName);
+  const [pLast4, setPLast4] = useState(pf.bankLast4);
+  const [pMethod, setPMethod] = useState(pf.bankMethod);
+  const [pW9, setPW9] = useState(pf.w9OnFile);
+  const [pAcc, setPAcc] = useState(pf.accredited);
+  const [profileBusy, setProfileBusy] = useState(false);
+
+  async function saveProfile() {
+    setProfileBusy(true);
+    try {
+      await api.patch(`/api/team/investors/${investor.id}/profile`, {
+        name: pName,
+        email: pEmail,
+        type: pType,
+        phone: pPhone,
+        bankName: pBank,
+        bankLast4: pLast4,
+        bankMethod: pMethod,
+        w9OnFile: pW9,
+        accredited: pAcc,
+      });
+      toast('Profile saved — the investor sees this on their Profile page');
+      onChanged();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not save profile');
+    } finally {
+      setProfileBusy(false);
+    }
+  }
+
   async function saveNote() {
     setNoteBusy(true);
     try {
@@ -173,6 +209,7 @@ function InvestorDetail({
         {([
           ['Type', investor.type],
           ['Email', investor.email],
+          ['Phone', investor.profile.phone || '—'],
           ['Principal', investor.principal],
           ['Rate · term', `${investor.rate} · ${investor.term}`],
           ['Maturity', investor.maturity],
@@ -182,6 +219,42 @@ function InvestorDetail({
             <span style={label}>{k}</span><span style={val}>{v}</span>
           </div>
         ))}
+      </div>
+
+      <div className="card" style={{ padding: '18px 20px' }}>
+        <div className="tileEyebrow">PROFILE</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
+          <Field label="LEGAL NAME"><input className="fieldLight" data-testid="mp-name" value={pName} onChange={(x) => setPName(x.target.value)} /></Field>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <Field label="CONTACT EMAIL"><input className="fieldLight" data-testid="mp-email" value={pEmail} onChange={(x) => setPEmail(x.target.value)} /></Field>
+            <Field label="PHONE"><input className="fieldLight" data-testid="mp-phone" placeholder="(212) 555-0100" value={pPhone} onChange={(x) => setPPhone(x.target.value)} /></Field>
+          </div>
+          <Field label="ACCOUNT TYPE">
+            <div className="segment" style={{ borderRadius: 9 }}>
+              <div className={`segmentItem${pType === 'INDIVIDUAL' ? ' active' : ''}`} style={{ padding: 9, borderRadius: 8, fontSize: '.8rem', color: pType === 'INDIVIDUAL' ? '#0b1d3a' : '#5b6473' }} onClick={() => setPType('INDIVIDUAL')}>Individual</div>
+              <div className={`segmentItem${pType === 'ENTITY' ? ' active' : ''}`} style={{ padding: 9, borderRadius: 8, fontSize: '.8rem', color: pType === 'ENTITY' ? '#0b1d3a' : '#5b6473' }} onClick={() => setPType('ENTITY')}>Entity</div>
+            </div>
+          </Field>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <Field label="BANK"><input className="fieldLight" data-testid="mp-bank" placeholder="Chase" value={pBank} onChange={(x) => setPBank(x.target.value)} /></Field>
+            <Field label="ACCOUNT LAST-4"><input className="fieldLight" data-testid="mp-last4" placeholder="6042" maxLength={4} value={pLast4} onChange={(x) => setPLast4(x.target.value)} /></Field>
+          </div>
+          <Field label="PAYMENT METHOD"><input className="fieldLight" data-testid="mp-method" placeholder="ACH · monthly" value={pMethod} onChange={(x) => setPMethod(x.target.value)} /></Field>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: '.8rem', color: '#5b6473', cursor: 'pointer' }}>
+            <input type="checkbox" data-testid="mp-w9" checked={pW9} onChange={(x) => setPW9(x.target.checked)} />
+            Form W-9 on file
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: '.8rem', color: '#5b6473', cursor: 'pointer' }}>
+            <input type="checkbox" data-testid="mp-accredited" checked={pAcc} onChange={(x) => setPAcc(x.target.checked)} />
+            Accredited-investor acknowledgment confirmed
+          </label>
+          <button className="btnPrimary" data-testid="mp-save" style={{ padding: '11px 18px', fontSize: '.84rem', borderRadius: 10 }} onClick={saveProfile} disabled={profileBusy || pName.trim().length < 2 || !pEmail.includes('@')}>
+            {profileBusy ? 'Saving…' : 'Save profile'}
+          </button>
+          <div style={{ fontSize: '.74rem', color: '#8b93a3' }}>
+            This is what the investor sees on their Profile page. Banking changes are confirmed with the investor by phone before you record them here.
+          </div>
+        </div>
       </div>
 
       <div className="card" style={{ padding: '18px 20px' }}>

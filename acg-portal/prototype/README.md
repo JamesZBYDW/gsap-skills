@@ -24,8 +24,10 @@ You can exercise the flows:
   where you enter an investor's details, **note terms** (principal, fixed rate, term,
   wire-received date — the distribution amount, first distribution, maturity, and
   status all auto-derive), and **login credentials** (email + password) in one step.
-  From an investor's detail panel you can also update their note terms and reset
-  their login later.
+  From an investor's detail panel you can also edit their **profile data** (name,
+  contact email, phone, banking on file, W-9, accreditation — what the investor
+  sees read-only on their Profile page), update their note terms, and reset their
+  login.
 
 ## What this is — and isn't
 
