@@ -12,7 +12,6 @@ export type IconName =
   | 'user'
   | 'users'
   | 'user-plus'
-  | 'bell'
   | 'search'
   | 'plus'
   | 'building'
@@ -97,15 +96,6 @@ const PATHS: Record<IconName, { sw: number; body: React.ReactNode }> = {
         <circle cx="9" cy="8" r="3.4" />
         <path d="M3 20c0-3.4 2.7-5 6-5" />
         <path d="M17 9v6M14 12h6" />
-      </>
-    ),
-  },
-  bell: {
-    sw: 1.7,
-    body: (
-      <>
-        <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-        <path d="M13.7 21a2 2 0 0 1-3.4 0" />
       </>
     ),
   },

@@ -69,7 +69,7 @@ export async function createInvestorAccount(
 /**
  * Management updates an investor's profile data: identity/contact details,
  * banking on file (recorded by management after the phone confirmation the
- * compliance brief requires), and W-9.
+ * compliance brief requires).
  */
 export async function updateInvestorProfile(
   investorId: string,
@@ -93,7 +93,6 @@ export async function updateInvestorProfile(
         email: input.email,
         type: input.type,
         phone: input.phone,
-        w9OnFile: input.w9OnFile,
       },
     });
     // Keep the linked login's display name in sync (login email is managed

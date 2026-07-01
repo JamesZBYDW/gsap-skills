@@ -14,7 +14,6 @@ export default async function DocumentsPage() {
       portalLabel={shell.portalLabel}
       nav={shell.nav}
       footer={shell.footer}
-      hasUnread={shell.hasUnread}
       eyebrow="DOCUMENTS"
       title="Documents"
       readOnlyLabel={readOnlyLabel}

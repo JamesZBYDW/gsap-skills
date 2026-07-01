@@ -115,7 +115,6 @@ function InvestorDetail({
   const [pBank, setPBank] = useState(pf.bankName);
   const [pLast4, setPLast4] = useState(pf.bankLast4);
   const [pMethod, setPMethod] = useState(pf.bankMethod);
-  const [pW9, setPW9] = useState(pf.w9OnFile);
   const [profileBusy, setProfileBusy] = useState(false);
 
   async function saveProfile() {
@@ -129,7 +128,6 @@ function InvestorDetail({
         bankName: pBank,
         bankLast4: pLast4,
         bankMethod: pMethod,
-        w9OnFile: pW9,
       });
       toast('Profile saved — the investor sees this on their Profile page');
       onChanged();
@@ -238,10 +236,6 @@ function InvestorDetail({
             <Field label="ACCOUNT LAST-4"><input className="fieldLight" data-testid="mp-last4" placeholder="6042" maxLength={4} value={pLast4} onChange={(x) => setPLast4(x.target.value)} /></Field>
           </div>
           <Field label="PAYMENT METHOD"><input className="fieldLight" data-testid="mp-method" placeholder="ACH · monthly" value={pMethod} onChange={(x) => setPMethod(x.target.value)} /></Field>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: '.8rem', color: '#5b6473', cursor: 'pointer' }}>
-            <input type="checkbox" data-testid="mp-w9" checked={pW9} onChange={(x) => setPW9(x.target.checked)} />
-            Form W-9 on file
-          </label>
           <button className="btnPrimary" data-testid="mp-save" style={{ padding: '11px 18px', fontSize: '.84rem', borderRadius: 10 }} onClick={saveProfile} disabled={profileBusy || pName.trim().length < 2 || !pEmail.includes('@')}>
             {profileBusy ? 'Saving…' : 'Save profile'}
           </button>

@@ -15,7 +15,6 @@ export default async function InvestorsPage() {
       portalLabel={shell.portalLabel}
       nav={shell.nav}
       footer={shell.footer}
-      hasUnread={shell.hasUnread}
       eyebrow="INVESTORS"
       title="Investors"
       dateText={formatWeekdayDate(new Date())}

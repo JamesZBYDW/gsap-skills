@@ -95,7 +95,6 @@ describe('investorProfileSchema (management edits investor profile)', () => {
       expect(r.data.phone).toBe('(917) 555-0142');
       expect(r.data.bankName).toBeNull();
       expect(r.data.bankLast4).toBeNull();
-      expect(r.data.w9OnFile).toBe(false);
     }
   });
   it('requires bank name and last-4 together, with last-4 exactly 4 digits', () => {

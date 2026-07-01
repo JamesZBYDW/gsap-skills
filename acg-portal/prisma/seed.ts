@@ -30,7 +30,6 @@ interface SeedInvestor {
   login?: { password: string }; // create an investor User login
   banking?: { bankName: string; last4: string; method: string };
   notif?: { distributionPosted: boolean; maturityReminder: boolean };
-  w9OnFile?: boolean;
 }
 
 const $ = (dollars: number) => Math.round(dollars * 100);
@@ -49,7 +48,6 @@ const investorsSeed: SeedInvestor[] = [
     login: { password: process.env.SEED_INVESTOR_PASSWORD ?? 'ChangeMe!Inv1234' },
     banking: { bankName: 'Chase', last4: '6042', method: 'ACH · monthly' },
     notif: { distributionPosted: true, maturityReminder: true },
-    w9OnFile: true,
   },
   {
     key: 'vancefo',
@@ -139,7 +137,6 @@ async function seedInvestors() {
         email: s.email,
         phone: s.phone ?? null,
         state: s.state,
-        w9OnFile: !!s.w9OnFile,
       },
     });
     ids[s.key] = investor.id;

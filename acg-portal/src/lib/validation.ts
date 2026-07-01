@@ -115,7 +115,7 @@ export const createAccountSchema = z.object({
 
 // Management edits an investor's profile data (what the investor sees on their
 // Profile page): identity/contact details, banking on file (changes are
-// phone-confirmed per compliance before management records them), and W-9.
+// phone-confirmed per compliance before management records them).
 export const investorProfileSchema = z
   .object({
     name: z.string().trim().min(2, 'Enter a legal name or entity.').max(200),
@@ -139,7 +139,6 @@ export const investorProfileSchema = z
         return t;
       }),
     bankMethod: z.string().trim().max(60).optional().default('').transform((v) => (v.trim().length ? v.trim() : null)),
-    w9OnFile: z.boolean().optional().default(false),
   })
   .refine((v) => (v.bankName === null) === (v.bankLast4 === null), {
     message: 'Banking needs both a bank name and the account last-4.',

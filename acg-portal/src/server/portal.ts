@@ -195,7 +195,6 @@ export interface ProfileVM {
   email: string;
   phone: string;
   banking: { display: string; method: string } | null;
-  w9OnFile: boolean;
   notif: { distributionPosted: boolean; maturityReminder: boolean };
 }
 
@@ -212,7 +211,6 @@ export async function getProfile(investorId: string): Promise<ProfileVM> {
     banking: investor.banking
       ? { display: maskedAccount(investor.banking.bankName, investor.banking.last4), method: investor.banking.method }
       : null,
-    w9OnFile: investor.w9OnFile,
     notif: {
       distributionPosted: investor.notifPref?.distributionPosted ?? true,
       maturityReminder: investor.notifPref?.maturityReminder ?? true,

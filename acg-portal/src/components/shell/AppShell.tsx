@@ -12,7 +12,6 @@ export function AppShell({
   eyebrow,
   title,
   dateText,
-  hasUnread,
   children,
   fill,
   readOnlyLabel,
@@ -24,7 +23,6 @@ export function AppShell({
   eyebrow: string;
   title: string;
   dateText?: string;
-  hasUnread?: boolean;
   children: React.ReactNode;
   /** When true the scroll region is a flex column with no padding (chat views). */
   fill?: boolean;
@@ -35,7 +33,7 @@ export function AppShell({
     <div className="app">
       <Sidebar portalLabel={portalLabel} nav={nav} footer={footer} />
       <main className="main">
-        <TopBar eyebrow={eyebrow} title={title} side={side} dateText={dateText} hasUnread={hasUnread} />
+        <TopBar eyebrow={eyebrow} title={title} side={side} dateText={dateText} />
         {readOnlyLabel && (
           <div
             style={{

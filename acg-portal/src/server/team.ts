@@ -102,7 +102,6 @@ export interface InvestorRowVM {
     bankName: string;
     bankLast4: string;
     bankMethod: string;
-    w9OnFile: boolean;
   };
 }
 
@@ -146,7 +145,6 @@ export async function getInvestorsRoster(now = new Date()): Promise<InvestorRowV
         bankName: i.banking?.bankName ?? '',
         bankLast4: i.banking?.last4 ?? '',
         bankMethod: i.banking?.method ?? '',
-        w9OnFile: i.w9OnFile,
       },
     };
   });

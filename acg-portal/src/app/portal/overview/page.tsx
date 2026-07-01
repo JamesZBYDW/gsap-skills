@@ -14,7 +14,6 @@ export default async function OverviewPage() {
       portalLabel={shell.portalLabel}
       nav={shell.nav}
       footer={shell.footer}
-      hasUnread={shell.hasUnread}
       eyebrow="OVERVIEW"
       title={`Good morning, ${vm.greetingName}`}
       readOnlyLabel={readOnlyLabel}

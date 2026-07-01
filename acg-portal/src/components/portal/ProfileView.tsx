@@ -89,13 +89,10 @@ export function ProfileView({ vm, readOnly }: { vm: ProfileVM; readOnly: boolean
         </div>
       </div>
 
-      {/* TAX & NOTIFICATIONS */}
+      {/* NOTIFICATIONS */}
       <div className="card" style={cardStyle}>
-        <div className="tileEyebrow">TAX &amp; NOTIFICATIONS</div>
+        <div className="tileEyebrow">NOTIFICATIONS</div>
         <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 15 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={rowLabel}>Tax form</span><span style={rowValue}>Form W-9</span>
-          </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '.82rem', color: '#0c1f3d', fontWeight: 500 }}>Distribution posted</span>
             <Toggle on={notif.distributionPosted} disabled={readOnly} onToggle={() => setPref('distributionPosted', !notif.distributionPosted)} />

@@ -15,7 +15,6 @@ export default async function TeamOverviewPage() {
       portalLabel={shell.portalLabel}
       nav={shell.nav}
       footer={shell.footer}
-      hasUnread={shell.hasUnread}
       eyebrow="CONSOLE"
       title="Portfolio overview"
       dateText={formatWeekdayDate(new Date())}

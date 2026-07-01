@@ -14,7 +14,6 @@ export default async function ProfilePage() {
       portalLabel={shell.portalLabel}
       nav={shell.nav}
       footer={shell.footer}
-      hasUnread={shell.hasUnread}
       eyebrow="PROFILE"
       title="Account & profile"
       readOnlyLabel={readOnlyLabel}

@@ -9,13 +9,11 @@ export function TopBar({
   title,
   side,
   dateText,
-  hasUnread,
 }: {
   eyebrow: string;
   title: string;
   side: 'investor' | 'team';
   dateText?: string;
-  hasUnread?: boolean;
 }) {
   const router = useRouter();
 
@@ -46,10 +44,6 @@ export function TopBar({
         <button className="signOutBtn" onClick={signOut}>
           <Icon name="log-out" size={15} strokeWidth={1.8} />
           Sign out
-        </button>
-        <button className="bellBtn" aria-label="Notifications">
-          <Icon name="bell" size={18} />
-          {hasUnread && <span className="bellDot" />}
         </button>
       </div>
     </div>

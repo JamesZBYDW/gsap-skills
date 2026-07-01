@@ -8,7 +8,6 @@ export interface InvestorShell {
   portalLabel: string;
   nav: NavItemData[];
   footer: SidebarFooter;
-  hasUnread: boolean;
 }
 
 export async function getInvestorShell(
@@ -40,14 +39,13 @@ export async function getInvestorShell(
         avatarText: initials(investor.legalName),
       };
 
-  return { portalLabel: 'INVESTOR PORTAL', nav, footer, hasUnread: false };
+  return { portalLabel: 'INVESTOR PORTAL', nav, footer };
 }
 
 export interface TeamShell {
   portalLabel: string;
   nav: NavItemData[];
   footer: SidebarFooter;
-  hasUnread: boolean;
 }
 
 export async function getTeamShell(viewerName: string): Promise<TeamShell> {
@@ -64,7 +62,7 @@ export async function getTeamShell(viewerName: string): Promise<TeamShell> {
     avatarText: 'IR',
   };
 
-  return { portalLabel: 'TEAM CONSOLE', nav, footer, hasUnread: false };
+  return { portalLabel: 'TEAM CONSOLE', nav, footer };
 }
 
 // ─── Page frame helpers (guard + shell in one call) ─────────────────────────

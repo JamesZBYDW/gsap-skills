@@ -13,7 +13,6 @@ export default async function CreateAccountPage() {
       portalLabel={shell.portalLabel}
       nav={shell.nav}
       footer={shell.footer}
-      hasUnread={shell.hasUnread}
       eyebrow="INVESTORS"
       title="Create account"
       dateText={formatWeekdayDate(new Date())}

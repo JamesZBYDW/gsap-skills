@@ -8,7 +8,7 @@ export function DocumentsView({ documents }: { documents: DocumentVM[] }) {
     return (
       <div className="content">
         <div className="empty">
-          No documents yet — statements, tax forms, and agreements will appear here
+          No documents yet — statements and agreements will appear here
           as Investor Relations issues them.
         </div>
       </div>
