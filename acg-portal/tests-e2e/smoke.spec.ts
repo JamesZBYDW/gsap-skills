@@ -1,0 +1,183 @@
+import { test, expect } from '@playwright/test';
+
+// End-to-end smoke of the signature flows against a running, seeded app.
+// Requires the app on E2E_BASE_URL (default http://localhost:3000) and the seed.
+
+const INVESTOR_EMAIL = process.env.SEED_INVESTOR_EMAIL ?? 'm.vance@gmail.com';
+const INVESTOR_PASSWORD = process.env.SEED_INVESTOR_PASSWORD ?? 'ChangeMe!Inv1234';
+const TEAM_EMAIL = process.env.SEED_TEAM_EMAIL ?? 'james@acg.example';
+const TEAM_PASSWORD = process.env.SEED_TEAM_PASSWORD ?? 'ChangeMe!Team123';
+
+type P = import('@playwright/test').Page;
+
+async function signIn(page: P, role: 'Investor' | 'Investor Relations', email: string, password: string) {
+  await page.goto('/login');
+  await page.getByText(role, { exact: true }).click();
+  await page.locator('input[autocomplete="username"]').fill(email);
+  await page.locator('input[autocomplete="current-password"]').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+}
+
+test('investor sees their note overview with exact figures and the full ledger', async ({ page }) => {
+  await signIn(page, 'Investor', INVESTOR_EMAIL, INVESTOR_PASSWORD);
+  await page.waitForURL('**/portal/overview');
+  await expect(page.getByText('Good morning, Margaret')).toBeVisible();
+  await expect(page.getByText('$250,000')).toBeVisible();
+  await expect(page.getByText('18.0%')).toBeVisible();
+  await expect(page.getByText('14 of 24 distributions paid')).toBeVisible();
+  await expect(page.getByText('April 14, 2027')).toBeVisible();
+  // The distribution ledger now lives on the overview (one page).
+  await expect(page.getByText('DISTRIBUTION SCHEDULE')).toBeVisible();
+  await expect(page.getByText('ACH·2407')).toBeVisible();
+  // Maturity-notice tile (replaces monthly income); outside the 90-day window.
+  await expect(page.getByText('NOTICES')).toBeVisible();
+  await expect(page.getByText(/90 days before your note expires/)).toBeVisible();
+});
+
+test('investor nav is trimmed — Overview, Documents, Profile only', async ({ page }) => {
+  await signIn(page, 'Investor', INVESTOR_EMAIL, INVESTOR_PASSWORD);
+  await page.waitForURL('**/portal/overview');
+  await expect(page.getByRole('link', { name: 'Requests' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Messages' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Schedule' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Documents' })).toBeVisible();
+  // Documents starts with no sample data.
+  await page.getByRole('link', { name: 'Documents' }).click();
+  await page.waitForURL('**/portal/documents');
+  await expect(page.getByText(/No documents yet/)).toBeVisible();
+});
+
+test('team nav/overview reflect no registrations or messages; Create account is present', async ({ page }) => {
+  await signIn(page, 'Investor Relations', TEAM_EMAIL, TEAM_PASSWORD);
+  await page.waitForURL('**/console/overview');
+  await expect(page.getByText('Portfolio overview')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Registrations' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Messages' })).toHaveCount(0);
+  await expect(page.getByText('Pending registrations')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Create account', exact: true })).toBeVisible();
+});
+
+// Signature loop A: management edits an existing investor's note terms + login
+// from the detail panel; that investor then signs in and sees the schedule.
+test('management sets terms + login on an existing investor; they sign in and see the schedule', async ({ page }) => {
+  const email = 'crest.login@acg.example';
+  const password = 'Harbor2026xyz';
+
+  await signIn(page, 'Investor Relations', TEAM_EMAIL, TEAM_PASSWORD);
+  await page.waitForURL('**/console/overview');
+  await page.getByRole('link', { name: 'Investors', exact: true }).click();
+  await page.waitForURL('**/console/investors');
+  await page.getByText('Crest Harbor Holdings').first().click();
+
+  await page.getByTestId('mn-principal').fill('750,000');
+  await page.getByTestId('mn-rate').fill('15');
+  await page.getByTestId('mn-term').selectOption('18'); // 1.5 years
+  await page.getByTestId('mn-wire').fill('2026-08-01');
+  // Everything else auto-derives: amount ($9,375), first distribution (wire +
+  // 30 days), maturity (wire + term), and status flips to Active on the wire.
+  await expect(page.getByTestId('mn-amount')).toHaveValue('$9,375');
+  await expect(page.getByTestId('mn-first')).toHaveValue('August 31, 2026');
+  await expect(page.getByTestId('mn-maturity')).toHaveValue('February 1, 2028');
+  await expect(page.getByTestId('mn-status')).toHaveValue('Active');
+  await page.getByTestId('mn-save').click();
+  await expect(page.getByText('Note terms saved — schedule updated')).toBeVisible();
+
+  // Management edits the profile data the investor sees (phone + banking).
+  await page.getByText('Crest Harbor Holdings').first().click();
+  await page.getByTestId('mp-phone').fill('(917) 555-0142');
+  await page.getByTestId('mp-bank').fill('Chase');
+  await page.getByTestId('mp-last4').fill('6042');
+  await page.getByTestId('mp-save').click();
+  await expect(page.getByText('Profile saved — the investor sees this on their Profile page')).toBeVisible();
+
+  // Provision a login the investor can use — leave them not forced to change it.
+  await page.getByTestId('cred-email').fill(email);
+  await page.getByTestId('cred-password').fill(password);
+  await page.getByRole('checkbox', { name: /change it after first sign-in/ }).uncheck();
+  await page.getByTestId('cred-save').click();
+  await expect(page.getByText(/Login set/)).toBeVisible();
+
+  // Close the slide-over (its overlay covers the top bar), then sign out.
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.waitForURL('**/login');
+  await signIn(page, 'Investor', email, password);
+  await page.waitForURL('**/portal/overview');
+  await expect(page.getByText('$750,000')).toBeVisible();
+
+  // The derived schedule (first distribution = wire + 30 days) is right on the
+  // overview page.
+  await expect(page.getByText('Aug 31, 2026').first()).toBeVisible();
+  await expect(page.getByText('$9,375').first()).toBeVisible();
+
+  // The profile data management entered is what the investor sees.
+  await page.getByRole('link', { name: 'Profile' }).click();
+  await page.waitForURL('**/portal/profile');
+  await expect(page.getByText('(917) 555-0142')).toBeVisible();
+  await expect(page.getByText('Chase ••••6042')).toBeVisible();
+});
+
+// Signature loop B: management creates a whole account in one step (details +
+// note terms + login) and requires a first-login password change. The investor
+// signs in with the issued password, is forced to set a new one, then lands on
+// their overview with the schedule generated from the entered terms.
+test('management creates an account; investor is forced to set a password, then sees the schedule', async ({ page }) => {
+  const contact = 'northwind@acg.example';
+  const issued = 'Northwind2026x';
+  const chosen = 'Aurora2026zzz';
+
+  await signIn(page, 'Investor Relations', TEAM_EMAIL, TEAM_PASSWORD);
+  await page.waitForURL('**/console/overview');
+  await page.getByRole('link', { name: 'Create account', exact: true }).click();
+  await page.waitForURL('**/console/create');
+
+  await page.getByTestId('ca-name').fill('Northwind Partners');
+  await page.getByTestId('ca-email').fill(contact);
+  await page.getByTestId('ca-phone').fill('(646) 555-0107');
+  await page.getByTestId('ca-type-entity').click();
+  await page.getByTestId('ca-principal').fill('600,000');
+  await page.getByTestId('ca-rate').fill('15');
+  await page.getByTestId('ca-term').selectOption('24'); // 2 years
+  await page.getByTestId('ca-wire').fill('2026-09-01');
+  // Amount, first distribution, maturity, and status all auto-derive.
+  await expect(page.getByTestId('ca-amount')).toHaveValue('$7,500');
+  await expect(page.getByTestId('ca-first')).toHaveValue('October 1, 2026');
+  await expect(page.getByTestId('ca-status')).toHaveValue('Active');
+  // Login email defaults to the contact email; keep "require change" checked.
+  await page.getByTestId('ca-password').fill(issued);
+  await page.getByTestId('ca-submit').click();
+  await page.waitForURL('**/console/investors');
+  await expect(page.getByText('Northwind Partners', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.waitForURL('**/login');
+
+  // Investor signs in with the issued password and is forced to set a new one.
+  await signIn(page, 'Investor', contact, issued);
+  await page.waitForURL('**/change-password');
+  await expect(page.getByText('Set your password')).toBeVisible();
+  await page.getByTestId('fp-new').fill(chosen);
+  await page.getByTestId('fp-confirm').fill(chosen);
+  await page.getByTestId('fp-submit').click();
+  await page.waitForURL('**/portal/overview');
+  await expect(page.getByText('$600,000')).toBeVisible();
+
+  // The derived schedule (first distribution = wire + 30 days) appears
+  // directly on the overview page.
+  await expect(page.getByText('Oct 1, 2026').first()).toBeVisible();
+  await expect(page.getByText('$7,500').first()).toBeVisible();
+
+  // The phone management entered at creation shows on the investor's Profile.
+  await page.getByRole('link', { name: 'Profile' }).click();
+  await page.waitForURL('**/portal/profile');
+  await expect(page.getByText('(646) 555-0107')).toBeVisible();
+  await page.getByRole('link', { name: 'Overview' }).click();
+  await page.waitForURL('**/portal/overview');
+
+  // The new password sticks: sign out and back in with it, no forced screen.
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.waitForURL('**/login');
+  await signIn(page, 'Investor', contact, chosen);
+  await page.waitForURL('**/portal/overview');
+  await expect(page.getByText('$600,000')).toBeVisible();
+});
