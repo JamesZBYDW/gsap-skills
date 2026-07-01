@@ -45,7 +45,8 @@ const state={
   detail:null, compose:null, toast:'',
   search:'', filter:'All',
   toggles:{posted:true,maturity:true},
-  ca:{type:'Individual', requirePw:true},
+  ca:{type:'Individual', requirePw:true, principal:'', rate:'', term:'24', wire:'', first:'', status:'Awaiting'},
+  mn:{principal:'', rate:'', term:'24', wire:'', first:'', status:'Awaiting'},
   investors:[
     {id:'i1',name:'Margaret Vance',type:'Individual',state:'Active',principal:'$250,000',rate:'18%',term:'24 mo',email:'m.vance@gmail.com',wire:'Apr 14, 2025',maturity:'Apr 14, 2027',hasLogin:true},
     {id:'i2',name:'Vance Family Office',type:'Entity',state:'Active',principal:'$1,200,000',rate:'18%',term:'24 mo',email:'ops@vancefo.com',wire:'May 2, 2025',maturity:'May 2, 2027'},
@@ -101,6 +102,16 @@ function toast(msg){state.toast=msg;render();clearTimeout(toast._t);toast._t=set
 function scrollMsgs(){setTimeout(function(){document.querySelectorAll('[data-msglist]').forEach(function(el){el.scrollTop=el.scrollHeight;});},30);}
 function addMonths(n){const d=new Date(Date.UTC(2026,5,30));d.setUTCMonth(d.getUTCMonth()+(n||24));return MO[d.getUTCMonth()]+' '+d.getUTCDate()+', '+d.getUTCFullYear();}
 const uid=()=>'r'+Math.random().toString(36).slice(2,7);
+// ---- note-term computation ----
+function toNum(s){var n=parseFloat(String(s==null?'':s).replace(/[^0-9.]/g,''));return isFinite(n)?n:NaN;}
+function fmtMoney(n){return '$'+Math.round(n).toLocaleString('en-US');}
+function calcAmount(principal,rate){var p=toNum(principal),r=toNum(rate);if(!(p>0)||!(r>0))return '—';return fmtMoney(p*(r/100)/12);}
+function calcMaturity(wireISO,termMonths){var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(wireISO||''));if(!m)return '—';var y=+m[1],mo=+m[2]-1,d=+m[3];var months=parseInt(termMonths,10)||0;var total=mo+months,ny=y+Math.floor(total/12),nm=((total%12)+12)%12;var dim=new Date(Date.UTC(ny,nm+1,0)).getUTCDate();return MOF[nm]+' '+Math.min(d,dim)+', '+ny;}
+function fmtShort(wireISO){var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(wireISO||''));if(!m)return '—';return MO[(+m[2])-1]+' '+(+m[3])+', '+m[1];}
+function toISO(disp){if(!disp||disp==='—')return '';var m=/^([A-Za-z]{3,})\s+(\d{1,2}),\s*(\d{4})$/.exec(String(disp));if(!m)return '';var mi=MO.indexOf(m[1].slice(0,3));if(mi<0)mi=MOF.indexOf(m[1]);if(mi<0)return '';return m[3]+'-'+('0'+(mi+1)).slice(-2)+'-'+('0'+(+m[2])).slice(-2);}
+function termOptions(sel){return [[12,'1 year'],[18,'1.5 years'],[24,'2 years'],[36,'3 years']].map(function(o){return '<option value="'+o[0]+'"'+(String(sel)===String(o[0])?' selected':'')+'>'+o[1]+'</option>';}).join('');}
+function syncFields(prefix,obj){var g=function(id){var e=document.getElementById(prefix+id);return e?e.value:'';};obj.principal=g('Principal');obj.rate=g('Rate');obj.term=g('Term')||obj.term;obj.wire=g('Wire');obj.first=g('First');obj.status=g('Status')||obj.status;}
+function recomputeAuto(prefix,obj){var a=document.getElementById(prefix+'AmountAuto');var m=document.getElementById(prefix+'MaturityAuto');if(a)a.textContent=calcAmount(obj.principal,obj.rate);if(m)m.textContent=calcMaturity(obj.wire,obj.term);}
 
 // =====================================================================
 // VIEWS
@@ -206,18 +217,20 @@ function tvCreate(){
   const inp=(id,ph,val,type)=>'<input id="'+id+'" '+(type?'type="'+type+'" ':'')+'value="'+esc(val||'')+'" placeholder="'+(ph||'')+'" style="width:100%;border:1px solid rgba(12,31,61,.14);border-radius:11px;padding:11px 14px;font-size:.86rem;color:#0c1f3d;background:#fff;outline:none">';
   const fld=(lbl,el)=>'<div style="flex:1"><div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#a87e45;margin-bottom:6px">'+lbl+'</div>'+el+'</div>';
   const seg=(on,label,act)=>'<div data-act="'+act+'" style="flex:1;text-align:center;padding:10px;border-radius:9px;font-size:.82rem;font-weight:600;cursor:pointer;'+(on?'background:#0071e3;color:#fff':'color:#5b6473')+'">'+label+'</div>';
-  const statusOpts=['Awaiting','Active','Declined'].map(s=>'<option value="'+s+'">'+s+'</option>').join('');
+  const statusOpts=['Awaiting','Active','Declined'].map(s=>'<option'+(state.ca.status===s?' selected':'')+' value="'+s+'">'+s+'</option>').join('');
+  const disp=(id,val)=>'<div id="'+id+'" style="width:100%;border:1px solid rgba(12,31,61,.1);border-radius:11px;padding:11px 14px;font-size:.86rem;color:#8b93a3;background:#f4f1ea">'+val+'</div>';
+  const termSel='<select id="caTerm" style="width:100%;border:1px solid rgba(12,31,61,.14);border-radius:11px;padding:11px 14px;font-size:.86rem;color:#0c1f3d;background:#fff">'+termOptions(state.ca.term)+'</select>';
   const details='<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:14px;padding:20px 22px"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">INVESTOR DETAILS</div><div style="display:flex;flex-direction:column;gap:14px;margin-top:15px">'
     +'<div style="display:flex;gap:12px">'+fld('LEGAL NAME',inp('caName','Full legal name or entity',''))+'</div>'
     +'<div style="display:flex;gap:12px">'+fld('CONTACT EMAIL',inp('caEmail','investor@example.com','','email'))+'</div>'
     +'<div style="flex:1"><div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#a87e45;margin-bottom:6px">ACCOUNT TYPE</div><div style="display:flex;gap:4px;background:#f4f1ea;border:1px solid rgba(12,31,61,.08);border-radius:11px;padding:4px">'+seg(state.ca.type==='Individual','Individual','caInd')+seg(state.ca.type==='Entity','Entity','caEnt')+'</div></div>'
     +'</div></div>';
   const terms='<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:14px;padding:20px 22px"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">NOTE TERMS</div><div style="display:flex;flex-direction:column;gap:12px;margin-top:15px">'
-    +'<div style="display:flex;gap:12px">'+fld('PRINCIPAL',inp('caPrincipal','250,000',''))+fld('FIXED RATE %',inp('caRate','18',''))+'</div>'
-    +'<div style="display:flex;gap:12px">'+fld('DISTRIBUTION AMOUNT',inp('caAmount','3,750',''))+fld('RECURRING DAY',inp('caDay','1','1','number'))+'</div>'
-    +'<div style="display:flex;gap:12px">'+fld('FIRST DISTRIBUTION',inp('caFirst','','','date'))+fld('MATURITY DATE',inp('caMaturity','','','date'))+'</div>'
-    +'<div style="flex:1"><div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#a87e45;margin-bottom:6px">STATUS</div><select id="caStatus" style="width:100%;border:1px solid rgba(12,31,61,.14);border-radius:11px;padding:11px 14px;font-size:.86rem;color:#0c1f3d;background:#fff">'+statusOpts+'</select></div>'
-    +'<div style="font-size:.74rem;color:#8b93a3">Set status to Active with a first distribution date, recurring day, amount and maturity to generate the schedule now.</div></div></div>';
+    +'<div style="display:flex;gap:12px">'+fld('PRINCIPAL',inp('caPrincipal','250,000',state.ca.principal))+fld('FIXED RATE %',inp('caRate','18',state.ca.rate))+'</div>'
+    +'<div style="display:flex;gap:12px">'+fld('TERM',termSel)+fld('WIRE RECEIVED',inp('caWire','',state.ca.wire,'date'))+'</div>'
+    +'<div style="display:flex;gap:12px">'+fld('DISTRIBUTION AMOUNT (AUTO)',disp('caAmountAuto',calcAmount(state.ca.principal,state.ca.rate)))+fld('MATURITY (AUTO)',disp('caMaturityAuto',calcMaturity(state.ca.wire,state.ca.term)))+'</div>'
+    +'<div style="display:flex;gap:12px">'+fld('FIRST DISTRIBUTION',inp('caFirst','',state.ca.first,'date'))+fld('STATUS','<select id="caStatus" style="width:100%;border:1px solid rgba(12,31,61,.14);border-radius:11px;padding:11px 14px;font-size:.86rem;color:#0c1f3d;background:#fff">'+statusOpts+'</select>')+'</div>'
+    +'<div style="font-size:.74rem;color:#8b93a3">Distribution amount (principal × rate ÷ 12) and maturity (wire-received date + term) auto-populate. Distributions recur every 30 days from the first distribution date.</div></div></div>';
   const login='<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:14px;padding:20px 22px"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">INVESTOR LOGIN</div><div style="display:flex;flex-direction:column;gap:12px;margin-top:15px">'
     +'<div style="flex:1"><div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#a87e45;margin-bottom:6px">LOGIN EMAIL</div>'+inp('caLoginEmail','Defaults to the contact email','')+'<div style="font-size:.72rem;color:#8b93a3;margin-top:6px">Defaults to the contact email if left blank.</div></div>'
     +'<div style="flex:1"><div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#a87e45;margin-bottom:6px">INITIAL PASSWORD</div><div style="display:flex;gap:8px">'+inp('caPass','Set or generate','')+'<button data-act="caGenPass" style="padding:0 14px;border-radius:10px;background:#f4f1ea;border:1px solid rgba(12,31,61,.1);font-size:.82rem;font-weight:600;white-space:nowrap">Generate</button></div></div>'
@@ -233,15 +246,16 @@ function detailOverlay(){
   const fact=(l,v,b)=>'<div style="display:flex;justify-content:space-between"><span style="font-size:.8rem;color:#8b93a3">'+l+'</span><span style="font-size:.86rem;font-weight:'+(b?'700':'600')+'">'+v+'</span></div>';
   const inp=(id,ph,val,type)=>'<input id="'+id+'" '+(type?'type="'+type+'" ':'')+'value="'+esc(val||'')+'" placeholder="'+(ph||'')+'" style="width:100%;border:1px solid rgba(12,31,61,.14);border-radius:11px;padding:11px 14px;font-size:.86rem;color:#0c1f3d;background:#fff;outline:none">';
   const fld=(lbl,el)=>'<div style="flex:1"><div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#a87e45;margin-bottom:6px">'+lbl+'</div>'+el+'</div>';
-  const pv=(di.principal||'').replace(/[^0-9.]/g,''); const rv=(di.rate||'').replace(/[^0-9.]/g,'');
-  const statusOpts=['Awaiting','Active','Declined'].map(s=>'<option '+(di.state===s?'selected':'')+' value="'+s+'">'+s+'</option>').join('');
+  const statusOpts=['Awaiting','Active','Declined'].map(s=>'<option'+(state.mn.status===s?' selected':'')+' value="'+s+'">'+s+'</option>').join('');
+  const disp=(id,val)=>'<div id="'+id+'" style="width:100%;border:1px solid rgba(12,31,61,.1);border-radius:11px;padding:11px 14px;font-size:.86rem;color:#8b93a3;background:#f4f1ea">'+val+'</div>';
+  const termSel='<select id="mnTerm" style="width:100%;border:1px solid rgba(12,31,61,.14);border-radius:11px;padding:11px 14px;font-size:.86rem;color:#0c1f3d;background:#fff">'+termOptions(state.mn.term)+'</select>';
   const manageNote='<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:14px;padding:18px 20px"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">MANAGE NOTE</div><div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">'
-    +'<div style="display:flex;gap:12px">'+fld('PRINCIPAL',inp('mnPrincipal','250,000',pv))+fld('FIXED RATE %',inp('mnRate','18',rv))+'</div>'
-    +'<div style="display:flex;gap:12px">'+fld('DISTRIBUTION AMOUNT',inp('mnAmount','3,750',''))+fld('RECURRING DAY',inp('mnDay','1','1','number'))+'</div>'
-    +'<div style="display:flex;gap:12px">'+fld('FIRST DISTRIBUTION',inp('mnFirst','','','date'))+fld('MATURITY DATE',inp('mnMaturity','','','date'))+'</div>'
-    +'<div style="flex:1"><div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#a87e45;margin-bottom:6px">STATUS</div><select id="mnStatus" style="width:100%;border:1px solid rgba(12,31,61,.14);border-radius:11px;padding:11px 14px;font-size:.86rem;color:#0c1f3d;background:#fff">'+statusOpts+'</select></div>'
+    +'<div style="display:flex;gap:12px">'+fld('PRINCIPAL',inp('mnPrincipal','250,000',state.mn.principal))+fld('FIXED RATE %',inp('mnRate','18',state.mn.rate))+'</div>'
+    +'<div style="display:flex;gap:12px">'+fld('TERM',termSel)+fld('WIRE RECEIVED',inp('mnWire','',state.mn.wire,'date'))+'</div>'
+    +'<div style="display:flex;gap:12px">'+fld('DISTRIBUTION AMOUNT (AUTO)',disp('mnAmountAuto',calcAmount(state.mn.principal,state.mn.rate)))+fld('MATURITY (AUTO)',disp('mnMaturityAuto',calcMaturity(state.mn.wire,state.mn.term)))+'</div>'
+    +'<div style="display:flex;gap:12px">'+fld('FIRST DISTRIBUTION',inp('mnFirst','',state.mn.first,'date'))+fld('STATUS','<select id="mnStatus" style="width:100%;border:1px solid rgba(12,31,61,.14);border-radius:11px;padding:11px 14px;font-size:.86rem;color:#0c1f3d;background:#fff">'+statusOpts+'</select>')+'</div>'
     +'<button data-act="saveNote" data-id="'+di.id+'" style="padding:11px 18px;border-radius:10px;background:#0071e3;color:#fff;font-size:.84rem;font-weight:700">Save note &amp; regenerate schedule</button>'
-    +'<div style="font-size:.74rem;color:#8b93a3">Set status Active with a first distribution date, recurring day, amount and maturity — the investor\'s schedule generates from these.</div></div></div>';
+    +'<div style="font-size:.74rem;color:#8b93a3">Distribution amount (principal × rate ÷ 12) and maturity (wire-received date + term) auto-populate. Distributions recur every 30 days from the first distribution date.</div></div></div>';
   const setLogin='<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:14px;padding:18px 20px"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">INVESTOR LOGIN</div><div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">'
     +fld('LOGIN EMAIL',inp('clEmail','',di.email==='—'?'':di.email))
     +'<div style="flex:1"><div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#a87e45;margin-bottom:6px">INITIAL PASSWORD</div><div style="display:flex;gap:8px">'+inp('clPass','Set or generate','')+'<button data-act="genPass" style="padding:0 14px;border-radius:10px;background:#f4f1ea;border:1px solid rgba(12,31,61,.1);font-size:.82rem;font-weight:600;white-space:nowrap">Generate</button></div></div>'
@@ -290,14 +304,14 @@ const H={
   caEnt:()=>{state.ca.type='Entity';render();},
   caReq:()=>{state.ca.requirePw=!state.ca.requirePw;render();},
   caGenPass:()=>{var el=document.getElementById('caPass');if(!el)return;var c='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789',p='';for(var i=0;i<14;i++)p+=c[Math.floor(Math.random()*c.length)];el.value=p+'2a';},
-  createAccount:()=>{var g=v=>((document.getElementById(v)||{}).value||'').trim();var name=g('caName'),email=g('caEmail');if(!name||!email){toast('Enter a legal name and contact email');return;}var p=g('caPrincipal'),r=g('caRate'),mat=g('caMaturity'),st=g('caStatus')||'Awaiting';var login=g('caLoginEmail')||email;var matDisp=mat?(function(){var d=new Date(mat+'T00:00:00Z');return MO[d.getUTCMonth()]+' '+d.getUTCDate()+', '+d.getUTCFullYear();})():'—';state.investors.push({id:uid(),name:name,type:state.ca.type,state:st,principal:p?('$'+p.replace(/^\$/,'')):'—',rate:r?(r+'%'):'—',term:'—',email:login,wire:'—',maturity:matDisp,hasLogin:true});state.ca={type:'Individual',requirePw:true};state.tv='investors';render();toast('Account created — share the login with the investor (demo — resets on refresh)');},
+  createAccount:()=>{var g=v=>((document.getElementById(v)||{}).value||'').trim();var name=g('caName'),email=g('caEmail');if(!name||!email){toast('Enter a legal name and contact email');return;}var p=g('caPrincipal'),r=g('caRate'),term=g('caTerm')||'24',wire=g('caWire'),st=g('caStatus')||'Awaiting';var login=g('caLoginEmail')||email;var pn=toNum(p);var amt=calcAmount(p,r);var mat=calcMaturity(wire,term);state.investors.push({id:uid(),name:name,type:state.ca.type,state:st,principal:(pn>0)?('$'+pn.toLocaleString('en-US')):'—',rate:r?(r.replace(/[^0-9.]/g,'')+'%'):'—',term:term+' mo',amount:amt,email:login,wire:fmtShort(wire),maturity:mat,hasLogin:true});state.ca={type:'Individual',requirePw:true,principal:'',rate:'',term:'24',wire:'',first:'',status:'Awaiting'};state.tv='investors';render();toast('Account created — share the login with the investor (demo — resets on refresh)');},
   addInvestor:()=>{state.compose={kind:'investor'};render();},
   closeCompose:()=>{state.compose=null;render();},
   submitCompose:()=>{var c=state.compose;if(!c)return;
     var name=((document.getElementById('cName')||{}).value||'').trim();var email=((document.getElementById('cEmail')||{}).value||'').trim();if(!name||!email){toast('Enter a name and email');return;}state.investors.push({id:uid(),name:name,type:'Individual',state:'Awaiting',principal:'—',rate:'—',term:'—',email:email,wire:'—',maturity:'—',hasLogin:false});state.compose=null;state.tv='investors';render();toast('Investor added — set note terms & login next');},
-  openDetail:(el)=>{state.detail=el.getAttribute('data-id');render();},
+  openDetail:(el)=>{var id=el.getAttribute('data-id');state.detail=id;var di=state.investors.find(function(v){return v.id===id;});if(di){state.mn={principal:(di.principal||'').replace(/[^0-9.]/g,''),rate:(di.rate||'').replace(/[^0-9.]/g,''),term:((String(di.term).match(/\d+/)||['24'])[0]),wire:toISO(di.wire),first:'',status:(['Awaiting','Active','Declined'].indexOf(di.state)>=0?di.state:'Awaiting')};}render();},
   closeDetail:()=>{state.detail=null;render();},
-  saveNote:(el)=>{var id=el.getAttribute('data-id');var g=v=>((document.getElementById(v)||{}).value||'').trim();var p=g('mnPrincipal'),r=g('mnRate'),mat=g('mnMaturity'),st=g('mnStatus')||'Awaiting';var matDisp=mat?(function(){var d=new Date(mat+'T00:00:00Z');return MO[d.getUTCMonth()]+' '+d.getUTCDate()+', '+d.getUTCFullYear();})():'—';state.investors=state.investors.map(function(v){return v.id===id?Object.assign({},v,{state:st,principal:p?('$'+p.replace(/^\$/,'')):v.principal,rate:r?(r+'%'):v.rate,maturity:mat?matDisp:v.maturity}):v;});state.detail=null;render();toast('Note terms saved — schedule updated');},
+  saveNote:(el)=>{var id=el.getAttribute('data-id');var g=v=>((document.getElementById(v)||{}).value||'').trim();var p=g('mnPrincipal'),r=g('mnRate'),term=g('mnTerm')||'24',wire=g('mnWire'),st=g('mnStatus')||'Awaiting';var pn=toNum(p);var amt=calcAmount(p,r);var mat=calcMaturity(wire,term);state.investors=state.investors.map(function(v){return v.id===id?Object.assign({},v,{state:st,principal:(pn>0)?('$'+pn.toLocaleString('en-US')):v.principal,rate:r?(r.replace(/[^0-9.]/g,'')+'%'):v.rate,term:term+' mo',amount:amt,wire:wire?fmtShort(wire):v.wire,maturity:wire?mat:v.maturity}):v;});state.detail=null;render();toast('Note terms saved — schedule updated');},
   genPass:()=>{var el=document.getElementById('clPass');if(!el)return;var c='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789',p='';for(var i=0;i<14;i++)p+=c[Math.floor(Math.random()*c.length)];el.value=p+'2a';},
   setLogin:(el)=>{var id=el.getAttribute('data-id');var email=((document.getElementById('clEmail')||{}).value||'').trim();var pass=((document.getElementById('clPass')||{}).value||'').trim();if(!email){toast('Enter a login email');return;}if(pass.length<10){toast('Password must be at least 10 characters');return;}state.investors=state.investors.map(function(v){return v.id===id?Object.assign({},v,{hasLogin:true,email:email}):v;});render();toast('Login set — share '+email+' + password with the investor');},
   changePw:()=>{var cur=((document.getElementById('pwCur')||{}).value||''),nw=((document.getElementById('pwNew')||{}).value||'');if(!cur){toast('Enter your current password');return;}if(nw.length<10){toast('New password must be at least 10 characters');return;}var a=document.getElementById('pwCur'),b=document.getElementById('pwNew');if(a)a.value='';if(b)b.value='';toast('Password updated');},
@@ -310,6 +324,14 @@ document.getElementById('app').addEventListener('click',function(e){
   var el=e.target.closest('[data-act]');if(!el)return;var act=el.getAttribute('data-act');
   if(H[act]){e.preventDefault();H[act](el);}
 });
+// live recompute of auto-populated note-term fields (no re-render → keeps input focus)
+function onTermFieldInput(e){
+  var t=e.target;if(!t||!t.id)return;
+  if(/^ca(Principal|Rate|Term|Wire|First|Status)$/.test(t.id)){syncFields('ca',state.ca);recomputeAuto('ca',state.ca);}
+  else if(/^mn(Principal|Rate|Term|Wire|First|Status)$/.test(t.id)){syncFields('mn',state.mn);recomputeAuto('mn',state.mn);}
+}
+document.getElementById('app').addEventListener('input',onTermFieldInput);
+document.getElementById('app').addEventListener('change',onTermFieldInput);
 render();
 })();
 </script>
