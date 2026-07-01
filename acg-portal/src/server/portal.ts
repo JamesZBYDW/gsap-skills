@@ -1,15 +1,11 @@
 import 'server-only';
-import type { InvestorState, RequestType, RequestStatus } from '@prisma/client';
+import type { InvestorState } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { formatUSD, formatRate, formatRatePrecise } from '@/lib/money';
 import { formatDate, formatDateLong, formatMonthYear, arrivalLabel } from '@/lib/dates';
 import { deriveStatuses, type DistributionDisplayStatus } from '@/lib/schedule';
-import { investorStateTone, requestStatusTone, distributionTone, distributionStatusLabel, type Tone } from '@/lib/tone';
-import {
-  requestTypeLabel,
-  requestStatusLabel,
-  documentKindLabel,
-} from '@/lib/labels';
+import { investorStateTone, distributionTone, distributionStatusLabel, type Tone } from '@/lib/tone';
+import { documentKindLabel } from '@/lib/labels';
 import { firstName, maskedAccount } from '@/lib/display';
 
 const CIRC = 2 * Math.PI * 50; // maturity-ring circumference (r=50)
@@ -198,56 +194,6 @@ export async function getSchedule(investorId: string, now = new Date()): Promise
     rangeEnd: formatMonthYear(note.distributions[note.distributions.length - 1]!.dueDate),
     bars: note.distributions.map((d) => ({ status: statuses.get(d.index)! })),
     ledger,
-  };
-}
-
-// ─── C. Requests ────────────────────────────────────────────────────────────
-
-export interface RequestVM {
-  id: string;
-  type: RequestType;
-  typeLabel: string;
-  title: string;
-  status: RequestStatus;
-  statusLabel: string;
-  tone: Tone;
-  date: string;
-  detail: string;
-  note: string;
-  history: { label: string; date: string; done: boolean }[];
-}
-
-export async function getInvestorRequests(investorId: string): Promise<RequestVM[]> {
-  const reqs = await prisma.request.findMany({
-    where: { investorId },
-    orderBy: { createdAt: 'desc' },
-    include: { history: { orderBy: { order: 'asc' } } },
-  });
-  return reqs.map(mapRequest);
-}
-
-export function mapRequest(r: {
-  id: string;
-  type: RequestType;
-  title: string;
-  status: RequestStatus;
-  createdAt: Date;
-  detail: string;
-  note: string;
-  history: { label: string; dateText: string; done: boolean }[];
-}): RequestVM {
-  return {
-    id: r.id,
-    type: r.type,
-    typeLabel: requestTypeLabel[r.type],
-    title: r.title,
-    status: r.status,
-    statusLabel: requestStatusLabel[r.status],
-    tone: requestStatusTone(r.status),
-    date: formatDate(r.createdAt),
-    detail: r.detail,
-    note: r.note,
-    history: r.history.map((h) => ({ label: h.label, date: h.dateText, done: h.done })),
   };
 }
 

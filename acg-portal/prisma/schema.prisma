@@ -49,25 +49,6 @@ enum RegistrationStatus {
   DECLINED
 }
 
-enum RequestType {
-  ADD_CAPITAL
-  UPDATE_BANKING
-  MATURITY_ELECTION
-  DOCUMENT
-  UPDATE_PROFILE
-  NOTIF_PREFS
-  GENERAL
-}
-
-enum RequestStatus {
-  PENDING_REVIEW
-  IN_REVIEW
-  NEEDS_INFO
-  APPROVED
-  COMPLETED
-  DECLINED
-}
-
 enum MessageAuthor {
   INVESTOR
   TEAM
@@ -95,6 +76,9 @@ model User {
   // 2FA scaffolding (TOTP secret is encrypted at rest when enabled)
   totpSecret   String?
   totpEnabled  Boolean  @default(false)
+  // Set when management provisions an initial password; investor is prompted to
+  // change it (not hard-enforced).
+  mustChangePassword Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -162,7 +146,6 @@ model Investor {
   note       Note?
   banking    BankingDetail?
   notifPref  NotifPref?
-  requests   Request[]
   messages   Message[]
   documents  Document[]
 
@@ -247,40 +230,6 @@ model Registration {
   reviewedByUserId    String?
 
   @@index([status])
-}
-
-// ─── Requests ───────────────────────────────────────────────────────────────
-
-model Request {
-  id         String        @id @default(cuid())
-  investorId String
-  investor   Investor      @relation(fields: [investorId], references: [id], onDelete: Cascade)
-  type       RequestType
-  title      String
-  detail     String        @default("")
-  status     RequestStatus @default(PENDING_REVIEW)
-  note       String        @default("") // amber compliance note (e.g. banking)
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-
-  history    RequestHistory[]
-
-  @@index([investorId])
-  @@index([status])
-}
-
-model RequestHistory {
-  id        String   @id @default(cuid())
-  requestId String
-  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  label     String
-  // Free-form date string to preserve copy like "Scheduled Jun 25, 2:30pm ET".
-  dateText  String
-  done      Boolean  @default(true)
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
-
-  @@index([requestId])
 }
 
 // ─── Messages ────────────────────────────────────────────────────────────────

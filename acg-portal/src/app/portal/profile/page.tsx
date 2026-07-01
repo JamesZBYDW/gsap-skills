@@ -6,7 +6,7 @@ import { getProfile } from '@/server/portal';
 export const dynamic = 'force-dynamic';
 
 export default async function ProfilePage() {
-  const { investorId, shell, readOnlyLabel } = await getPortalFrame();
+  const { investorId, shell, readOnly, readOnlyLabel } = await getPortalFrame();
   const vm = await getProfile(investorId);
   return (
     <AppShell
@@ -19,7 +19,7 @@ export default async function ProfilePage() {
       title="Account & profile"
       readOnlyLabel={readOnlyLabel}
     >
-      <ProfileView vm={vm} />
+      <ProfileView vm={vm} readOnly={readOnly} />
     </AppShell>
   );
 }

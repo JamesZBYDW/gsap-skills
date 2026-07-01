@@ -14,8 +14,8 @@ a Postgres database, server-side authorization, and an audit trail.
 > is always the "ACG Promissory Note." Returns are **fixed for the term — not
 > guaranteed**; never present them as guaranteed. Banking changes are confirmed
 > by phone; the portal records subscriptions and activates a note when the firm
-> records the wire — it does not move money. See `DESIGN_BRIEF.md §9` and the
-> Compliance section below.
+> sets its terms to Active — it does not move money. See `DESIGN_BRIEF.md §9` and
+> the Compliance section below.
 
 ## Stack
 
@@ -33,15 +33,27 @@ a Postgres database, server-side authorization, and an audit trail.
 |---|---|
 | Overview (note dashboard) | Portfolio overview |
 | Schedule & ledger | Investors roster + detail |
-| Requests (with status history) | Registrations queue (approve/decline) |
-| Messages (IR concierge thread) | Requests queue (review/advance) |
-| Documents (access-controlled) | Messages (per-investor + broadcast) |
-| Profile (banking, accreditation, notifications) | |
+| Messages (IR concierge chat) | Registrations queue (approve/decline) |
+| Documents (access-controlled) | Messages (per-investor chat + broadcast) |
+| Profile (banking, accreditation, notifications, change password) | Investor detail: **set note terms** + **provision login** |
 
 Access is gated by real permissions (no client-side role trust). Investors see
-only their own note, requests, messages, and documents. Team members are scoped
-by role. A TEAM admin can open an investor's portal **read-only** (audited
-impersonation) for support — all mutations are blocked while impersonating.
+only their own note, messages, and documents, and chat only with management.
+Management chats with any investor, provisions each investor's login, and sets
+their note terms. Team members are scoped by role. A TEAM admin can open an
+investor's portal **read-only** (audited impersonation) for support — all
+mutations are blocked while impersonating.
+
+### Logins & note terms (management-driven)
+
+- **Investor logins are provisioned by management.** From an investor's detail
+  panel, management sets the login email + an initial password (or generates
+  one); the investor can change it later in Profile. Credentials are hashed and
+  persisted for future sign-in.
+- **Management sets the note terms** — principal, fixed rate, status, first
+  distribution date, recurring day-of-month, distribution amount, and maturity.
+  Saving regenerates the distribution schedule, which the investor sees on their
+  Overview and Schedule.
 
 ## Local development
 
@@ -100,9 +112,9 @@ Change these before any non-demo deployment.
 src/
   app/
     login/                     auth gate (sign in + request access)
-    portal/                    investor side (layout guard + 6 views)
-    console/                   team side (layout guard + 5 views)
-    api/                       REST endpoints (auth, requests, messages, team/*)
+    portal/                    investor side (layout guard + views)
+    console/                   team side (layout guard + views)
+    api/                       REST endpoints (auth, messages, profile, team/*)
   components/
     shell/                     Sidebar, TopBar, AppShell
     portal/  team/             view components (1:1 with the prototype)
@@ -123,14 +135,16 @@ prisma/                       schema + migrations + seed
 
 ## Key flows (end-to-end, through real APIs)
 
-1. **Request access → Registrations queue → Approve → Investor (Awaiting) →
-   Record wire → Active** (schedule generated from the wire date).
-2. **Investor request → Team Requests queue → status advances → investor sees
-   the update** with a visible history trail.
-3. **Bidirectional messaging** per investor thread, with unread indicators both
-   sides and a team **broadcast** to all active investors.
-4. **Banking changes** carry the "confirmed by phone" note and are modeled as a
-   request requiring out-of-band confirmation (never auto-applied).
+1. **Request access → Registrations queue → Approve → Investor (Awaiting).**
+2. **Management provisions the investor's login** (email + initial password) →
+   the investor signs in against real database credentials → changes their
+   password in Profile.
+3. **Management sets the note terms** (principal, rate, status, first
+   distribution date, recurring day, amount, maturity) → the distribution
+   **schedule regenerates** → the investor sees it on Overview + Schedule.
+4. **Chat:** management messages any investor; each investor chats only with
+   management; unread indicators both sides + a team **broadcast** to all active
+   investors.
 
 ## Compliance & security
 
@@ -138,8 +152,9 @@ prisma/                       schema + migrations + seed
   same-origin CSRF checks, strict CSP and security headers.
 - Server-side authorization on every endpoint; investors are scoped to their own
   data, team by role. No client-side role trust.
-- Immutable **audit log** for logins, state changes, wire recording, approvals,
-  banking edits, impersonation, and downloads.
+- Immutable **audit log** for logins, state changes, note-term updates,
+  credential provisioning, password changes, approvals, banking edits,
+  impersonation, and downloads.
 - Documents are private — downloads require session + ownership, with a
   short-lived signed-URL option for out-of-band delivery.
 - Copy honors the brief: "ACG Promissory Note," "fixed for the term — not

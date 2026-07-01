@@ -43,6 +43,38 @@ export function distributionReference(index: number): string {
   return `ACH·${2400 + index * 7}`;
 }
 
+/**
+ * Generate a schedule from an explicit management-entered first distribution
+ * date through a maturity date: the first payment lands on `start` exactly, and
+ * each subsequent payment on `day` (clamped to that month) until `maturity`.
+ * Returns [] if `maturity` is missing or precedes `start`.
+ */
+export function generateScheduleBetween(
+  start: Date,
+  day: number,
+  amountCents: number,
+  maturity: Date | null,
+): GeneratedDistribution[] {
+  if (!maturity) return [];
+  const startY = start.getUTCFullYear();
+  const startM = start.getUTCMonth();
+  const out: GeneratedDistribution[] = [];
+  for (let i = 0; i < 600; i++) {
+    let due: Date;
+    if (i === 0) {
+      due = new Date(Date.UTC(startY, startM, start.getUTCDate()));
+    } else {
+      const ms = new Date(Date.UTC(startY, startM + i, 1));
+      const lastDay = new Date(Date.UTC(ms.getUTCFullYear(), ms.getUTCMonth() + 1, 0)).getUTCDate();
+      ms.setUTCDate(Math.min(day, lastDay));
+      due = ms;
+    }
+    if (due > maturity) break;
+    out.push({ index: i + 1, dueDate: due, amountCents });
+  }
+  return out;
+}
+
 export interface DistributionLike {
   index: number;
   paidDate: Date | null;

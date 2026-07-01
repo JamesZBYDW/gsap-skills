@@ -115,35 +115,6 @@ export function TeamOverviewView({ vm }: { vm: TeamOverviewVM }) {
 
           <Link
             className="card"
-            href="/console/requests"
-            style={{ padding: '18px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14 }}
-          >
-            <span
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 11,
-                flex: 'none',
-                background: 'rgba(0,113,227,.12)',
-                color: 'var(--acc)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 800,
-                fontSize: '1.05rem',
-              }}
-            >
-              {vm.openReqCount}
-            </span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '.9rem', fontWeight: 700 }}>Open requests</div>
-              <div style={{ fontSize: '.76rem', color: '#8b93a3' }}>Awaiting review or info</div>
-            </div>
-            <Icon name="chevron-right" size={17} color="#9aa1ad" strokeWidth={2} />
-          </Link>
-
-          <Link
-            className="card"
             href="/console/messages"
             style={{ padding: '18px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14 }}
           >

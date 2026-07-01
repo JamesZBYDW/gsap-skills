@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation';
 import { Icon } from '../Icon';
 import { Pill } from '../ui/Pill';
-import { useComposer } from './ComposerProvider';
 import type { OverviewVM, BarVM } from '@/server/portal';
 
 function miniBar(b: BarVM): React.CSSProperties {
@@ -15,7 +14,6 @@ function miniBar(b: BarVM): React.CSSProperties {
 
 export function OverviewView({ vm }: { vm: OverviewVM }) {
   const router = useRouter();
-  const { openCompose } = useComposer();
 
   if (!vm.active) {
     return (
@@ -111,21 +109,21 @@ export function OverviewView({ vm }: { vm: OverviewVM }) {
         </div>
       </div>
 
-      {/* Quick actions (span 2) */}
+      {/* Quick actions (span 2) — navigation shortcuts */}
       <div className="card" style={{ gridColumn: 'span 2', padding: '18px 22px', display: 'flex', flexDirection: 'column' }}>
         <div className="tileEyebrow">QUICK ACTIONS</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
-          <button className="quickAction" onClick={() => openCompose('ADD_CAPITAL')}>
-            <Icon name="plus" size={16} color="var(--acc)" strokeWidth={2} />Add capital
+          <button className="quickAction" onClick={() => router.push('/portal/schedule')}>
+            <Icon name="calendar" size={16} color="var(--acc)" />View schedule
           </button>
-          <button className="quickAction" onClick={() => openCompose('UPDATE_BANKING')}>
-            <Icon name="building" size={16} color="var(--acc)" />Update banking
-          </button>
-          <button className="quickAction" onClick={() => openCompose('DOCUMENT')}>
-            <Icon name="file" size={16} color="var(--acc)" />Request document
+          <button className="quickAction" onClick={() => router.push('/portal/documents')}>
+            <Icon name="file" size={16} color="var(--acc)" />Documents
           </button>
           <button className="quickAction" onClick={() => router.push('/portal/messages')}>
             <Icon name="message" size={16} color="var(--acc)" />Message IR
+          </button>
+          <button className="quickAction" onClick={() => router.push('/portal/profile')}>
+            <Icon name="user" size={16} color="var(--acc)" />Account &amp; profile
           </button>
         </div>
       </div>

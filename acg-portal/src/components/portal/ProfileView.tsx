@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import type { ProfileVM } from '@/server/portal';
 import { Toggle } from '@/components/ui/Toggle';
 import { Icon } from '@/components/Icon';
-import { useComposer } from '@/components/portal/ComposerProvider';
 import { api, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
 
@@ -15,11 +14,13 @@ const rowLabel: React.CSSProperties = { fontSize: '.82rem', color: '#8b93a3' };
 const rowValue: React.CSSProperties = { fontSize: '.88rem', fontWeight: 600 };
 const cardStyle: React.CSSProperties = { padding: '24px 26px' };
 
-export function ProfileView({ vm }: { vm: ProfileVM }) {
+export function ProfileView({ vm, readOnly }: { vm: ProfileVM; readOnly: boolean }) {
   const router = useRouter();
   const { toast } = useToast();
-  const { openCompose, readOnly } = useComposer();
   const [notif, setNotif] = useState(vm.notif);
+  const [cur, setCur] = useState('');
+  const [next, setNext] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
 
   async function setPref(key: NotifKey, value: boolean) {
     const prev = notif;
@@ -30,6 +31,21 @@ export function ProfileView({ vm }: { vm: ProfileVM }) {
     } catch (e) {
       setNotif(prev);
       toast(e instanceof ApiError ? e.message : 'Could not update notifications');
+    }
+  }
+
+  async function changePassword() {
+    if (readOnly) return;
+    setPwBusy(true);
+    try {
+      await api.post('/api/profile/password', { currentPassword: cur, newPassword: next });
+      setCur('');
+      setNext('');
+      toast('Password updated');
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Could not update password');
+    } finally {
+      setPwBusy(false);
     }
   }
 
@@ -78,7 +94,7 @@ export function ProfileView({ vm }: { vm: ProfileVM }) {
       <div className="card" style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div className="tileEyebrow">BANKING ON FILE</div>
-          <span className="linkBtn" onClick={() => openCompose('UPDATE_BANKING')}>Update ›</span>
+          <span className="linkBtn" onClick={() => router.push('/portal/messages')}>Message IR ›</span>
         </div>
         {vm.banking ? (
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 15 }}>
@@ -93,7 +109,7 @@ export function ProfileView({ vm }: { vm: ProfileVM }) {
           <div style={{ marginTop: 16, fontSize: '.88rem', color: '#8b93a3' }}>No banking on file</div>
         )}
         <div className="quietNote" style={{ marginTop: 16 }}>
-          Changes to banking are confirmed by phone before they take effect.
+          To change banking, message Investor Relations — changes are confirmed by phone before they take effect.
         </div>
       </div>
 
@@ -116,6 +132,31 @@ export function ProfileView({ vm }: { vm: ProfileVM }) {
             <span style={{ fontSize: '.82rem', color: '#0c1f3d', fontWeight: 500 }}>New message alerts</span>
             <Toggle on={notif.newMessage} disabled={readOnly} onToggle={() => setPref('newMessage', !notif.newMessage)} />
           </div>
+        </div>
+      </div>
+
+      {/* SECURITY — change password */}
+      <div className="card" style={cardStyle}>
+        <div className="tileEyebrow">SECURITY</div>
+        <div style={{ fontSize: '.9rem', fontWeight: 700, marginTop: 14 }}>Change password</div>
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 360 }}>
+          <div>
+            <div className="fieldLabel" style={{ color: '#8b93a3' }}>Current password</div>
+            <input className="fieldLight" type="password" autoComplete="current-password" value={cur} onChange={(e) => setCur(e.target.value)} disabled={readOnly} />
+          </div>
+          <div>
+            <div className="fieldLabel" style={{ color: '#8b93a3' }}>New password</div>
+            <input className="fieldLight" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} disabled={readOnly} />
+          </div>
+          <button
+            className="btnPrimary"
+            style={{ alignSelf: 'flex-start', padding: '10px 18px', fontSize: '.84rem', borderRadius: 10 }}
+            onClick={changePassword}
+            disabled={readOnly || pwBusy || !cur || next.length < 10}
+          >
+            {pwBusy ? 'Updating…' : 'Update password'}
+          </button>
+          <div style={{ fontSize: '.74rem', color: '#8b93a3' }}>At least 10 characters, with letters and numbers.</div>
         </div>
       </div>
     </div>

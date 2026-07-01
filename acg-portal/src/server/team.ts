@@ -2,11 +2,10 @@ import 'server-only';
 import type { InvestorState } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { formatUSD, formatCompactUSD, formatRate } from '@/lib/money';
-import { formatDate, daysBetween, startOfUTCDay } from '@/lib/dates';
-import { investorStateLabel, requestStatusLabel } from '@/lib/labels';
-import { investorStateTone, requestStatusTone, type Tone } from '@/lib/tone';
+import { formatDate, daysBetween, startOfUTCDay, toISODate } from '@/lib/dates';
+import { investorStateLabel } from '@/lib/labels';
+import { investorStateTone, type Tone } from '@/lib/tone';
 import { initials } from '@/lib/display';
-import { mapRequest, type RequestVM } from './portal';
 
 // ─── G. Team overview ───────────────────────────────────────────────────────
 
@@ -28,7 +27,6 @@ export interface TeamOverviewVM {
   maturingPrincipal: string;
   maturities: MaturityRowVM[];
   regCount: number;
-  openReqCount: number;
   msgUnread: number;
 }
 
@@ -65,9 +63,8 @@ export async function getTeamOverview(now = new Date()): Promise<TeamOverviewVM>
     };
   });
 
-  const [regCount, openReqs, msgUnread] = await Promise.all([
+  const [regCount, msgUnread] = await Promise.all([
     prisma.registration.count({ where: { status: 'PENDING' } }),
-    prisma.request.count({ where: { status: { in: ['PENDING_REVIEW', 'IN_REVIEW', 'NEEDS_INFO'] } } }),
     prisma.message.count({ where: { author: 'INVESTOR', readByTeam: false } }),
   ]);
 
@@ -79,7 +76,6 @@ export async function getTeamOverview(now = new Date()): Promise<TeamOverviewVM>
     maturingPrincipal: formatCompactUSD(maturingNotes.reduce((a, n) => a + n.principalCents, 0)),
     maturities,
     regCount,
-    openReqCount: openReqs,
     msgUnread,
   };
 }
@@ -99,12 +95,25 @@ export interface InvestorRowVM {
   email: string;
   wire: string;
   maturity: string;
+  hasLogin: boolean;
+  // Raw values for the management "Manage note" form (prefill).
+  edit: {
+    principalDollars: string;
+    ratePercent: string;
+    status: InvestorState;
+    firstDistributionISO: string;
+    distributionDay: number;
+    amountDollars: string;
+    maturityISO: string;
+  };
 }
+
+const dollars = (cents: number) => String(Math.round(cents) / 100);
 
 export async function getInvestorsRoster(): Promise<InvestorRowVM[]> {
   const investors = await prisma.investor.findMany({
     orderBy: { createdAt: 'asc' },
-    include: { note: true },
+    include: { note: true, user: { select: { id: true } } },
   });
   return investors.map((i) => ({
     id: i.id,
@@ -113,12 +122,22 @@ export async function getInvestorsRoster(): Promise<InvestorRowVM[]> {
     state: i.state,
     stateLabel: investorStateLabel[i.state],
     tone: investorStateTone(i.state),
-    principal: i.note ? formatUSD(i.note.principalCents) : '—',
-    rate: i.note ? formatRate(i.note.rateBps) : '—',
-    term: i.note ? `${i.note.termMonths} mo` : '—',
+    principal: i.note && i.note.principalCents ? formatUSD(i.note.principalCents) : '—',
+    rate: i.note && i.note.rateBps ? formatRate(i.note.rateBps) : '—',
+    term: i.note && i.note.termMonths ? `${i.note.termMonths} mo` : '—',
     email: i.email,
     wire: i.note?.wireDate ? formatDate(i.note.wireDate) : '—',
     maturity: i.note?.maturityDate ? formatDate(i.note.maturityDate) : '—',
+    hasLogin: !!i.user,
+    edit: {
+      principalDollars: i.note && i.note.principalCents ? dollars(i.note.principalCents) : '',
+      ratePercent: i.note && i.note.rateBps ? String(i.note.rateBps / 100) : '',
+      status: i.state,
+      firstDistributionISO: i.note?.firstDistributionDate ? toISODate(i.note.firstDistributionDate) : '',
+      distributionDay: i.note?.distributionDay ?? 1,
+      amountDollars: i.note && i.note.monthlyAmountCents ? dollars(i.note.monthlyAmountCents) : '',
+      maturityISO: i.note?.maturityDate ? toISODate(i.note.maturityDate) : '',
+    },
   }));
 }
 
@@ -154,21 +173,7 @@ export async function getRegistrations(): Promise<RegistrationVM[]> {
   }));
 }
 
-// ─── J. Requests queue ──────────────────────────────────────────────────────
-
-export interface TeamRequestVM extends RequestVM {
-  investorName: string;
-}
-
-export async function getTeamRequests(): Promise<TeamRequestVM[]> {
-  const reqs = await prisma.request.findMany({
-    orderBy: { createdAt: 'desc' },
-    include: { history: { orderBy: { order: 'asc' } }, investor: { select: { legalName: true } } },
-  });
-  return reqs.map((r) => ({ ...mapRequest(r), investorName: r.investor.legalName }));
-}
-
-// ─── K. Messages (threads) ──────────────────────────────────────────────────
+// ─── Messages (threads) ──────────────────────────────────────────────────
 
 export interface ThreadMessageVM {
   id: string;
@@ -192,7 +197,11 @@ export interface ThreadVM {
 }
 
 export async function getThreads(): Promise<ThreadVM[]> {
+  // Management can chat with any investor it administers — include all
+  // non-declined investors, even those with no messages yet, so a conversation
+  // can be started. Investors themselves only ever see their own single thread.
   const investors = await prisma.investor.findMany({
+    where: { state: { not: 'DECLINED' } },
     include: {
       note: { select: { principalCents: true } },
       messages: { orderBy: { sentAt: 'asc' } },
@@ -200,9 +209,8 @@ export async function getThreads(): Promise<ThreadVM[]> {
   });
 
   const threads = investors
-    .filter((i) => i.messages.length > 0)
     .map((i) => {
-      const last = i.messages[i.messages.length - 1]!;
+      const last = i.messages[i.messages.length - 1] ?? null;
       const unread = i.messages.filter((m) => m.author === 'INVESTOR' && !m.readByTeam).length;
       return {
         investorId: i.id,
@@ -211,10 +219,10 @@ export async function getThreads(): Promise<ThreadVM[]> {
         type: i.type === 'ENTITY' ? 'Entity' : 'Individual',
         stateLabel: investorStateLabel[i.state],
         principal: i.note ? formatUSD(i.note.principalCents) : '—',
-        last: last.text,
-        time: formatDate(last.sentAt),
+        last: last ? last.text : 'No messages yet',
+        time: last ? formatDate(last.sentAt) : '',
         unread,
-        lastMs: last.sentAt.getTime(),
+        lastMs: last ? last.sentAt.getTime() : 0,
         messages: i.messages.map((m) => ({
           id: m.id,
           author: m.author,
@@ -224,10 +232,8 @@ export async function getThreads(): Promise<ThreadVM[]> {
         })),
       };
     })
-    // Unread threads bubble up; within the same unread count, newest activity first.
-    .sort((a, b) => b.unread - a.unread || b.lastMs - a.lastMs);
+    // Unread first; then most-recent activity; then investors with messages before empty ones.
+    .sort((a, b) => b.unread - a.unread || b.lastMs - a.lastMs || a.investorName.localeCompare(b.investorName));
 
   return threads.map(({ lastMs, ...t }) => t);
 }
-
-export { requestStatusLabel, requestStatusTone };

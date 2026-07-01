@@ -11,13 +11,8 @@ export async function POST(req: NextRequest) {
     const parsed = addInvestorSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return errorJson(parsed.error.issues[0]?.message ?? 'Invalid input.', 400);
 
-    const { name, email, type, principal, termMonths } = parsed.data;
-    // `principal` is already validated + transformed to cents (or null).
-    const investor = await addInvestor(
-      { name, email, type, principalCents: principal, termMonths },
-      user.id,
-      clientIp(req),
-    );
+    const { name, email, type } = parsed.data;
+    const investor = await addInvestor({ name, email, type }, user.id, clientIp(req));
     return json({ ok: true, investorId: investor.id });
   });
 }

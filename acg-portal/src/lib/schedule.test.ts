@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   generateSchedule,
+  generateScheduleBetween,
   computeMaturity,
   deriveStatuses,
   distributionReference,
@@ -35,6 +36,25 @@ describe('generateSchedule', () => {
       'May 31, 2025',
       'Jun 30, 2025',
     ]);
+  });
+});
+
+describe('generateScheduleBetween (management-entered terms)', () => {
+  it('runs monthly from the first distribution to maturity on the recurring day', () => {
+    const s = generateScheduleBetween(utcDate(2026, 7, 1), 1, 375_000, utcDate(2028, 6, 1));
+    expect(s).toHaveLength(24);
+    expect(formatDate(s[0]!.dueDate)).toBe('Aug 1, 2026');
+    expect(formatDate(s[23]!.dueDate)).toBe('Jul 1, 2028');
+    expect(s.every((d) => d.amountCents === 375_000)).toBe(true);
+  });
+  it('honors an explicit first date that differs from the recurring day', () => {
+    const s = generateScheduleBetween(utcDate(2026, 7, 15), 1, 1000, utcDate(2026, 10, 1));
+    expect(s.map((d) => formatDate(d.dueDate))).toEqual([
+      'Aug 15, 2026', 'Sep 1, 2026', 'Oct 1, 2026', 'Nov 1, 2026',
+    ]);
+  });
+  it('returns nothing without a maturity date', () => {
+    expect(generateScheduleBetween(utcDate(2026, 7, 1), 1, 1000, null)).toEqual([]);
   });
 });
 

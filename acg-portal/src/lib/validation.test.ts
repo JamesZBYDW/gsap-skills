@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { registerSchema, addInvestorSchema } from './validation';
+import {
+  registerSchema,
+  addInvestorSchema,
+  noteTermsSchema,
+  credentialsSchema,
+  passwordChangeSchema,
+} from './validation';
 
 const baseReg = {
   name: 'Sofia Marenco',
@@ -39,9 +45,46 @@ describe('principal validation/transform', () => {
   it('rejects amounts above the supported maximum (Int-overflow guard)', () => {
     expect(registerSchema.safeParse({ ...baseReg, principal: '25,000,000', termMonths: 24 }).success).toBe(false);
   });
-  it('addInvestorSchema applies the same rules', () => {
-    expect(addInvestorSchema.safeParse({ name: 'Acme LLC', termMonths: 24, principal: '500,000' }).success).toBe(true);
-    expect(addInvestorSchema.safeParse({ name: 'Acme LLC', termMonths: 99, principal: '500,000' }).success).toBe(false);
-    expect(addInvestorSchema.safeParse({ name: 'Acme LLC', termMonths: 24, principal: '5' }).success).toBe(false);
+});
+
+describe('addInvestorSchema (shell only)', () => {
+  it('requires name + email; defaults type', () => {
+    const r = addInvestorSchema.safeParse({ name: 'Acme LLC', email: 'ops@acme.com' });
+    expect(r.success && r.data.type).toBe('INDIVIDUAL');
+  });
+  it('rejects a missing/invalid email', () => {
+    expect(addInvestorSchema.safeParse({ name: 'Acme LLC' }).success).toBe(false);
+    expect(addInvestorSchema.safeParse({ name: 'Acme LLC', email: 'nope' }).success).toBe(false);
+  });
+});
+
+describe('noteTermsSchema', () => {
+  const base = { ratePercent: '18', status: 'ACTIVE', distributionDay: '1', firstDistributionDate: '2026-08-01', maturityDate: '2028-08-01' };
+  it('transforms principal + amount to cents; keeps ratePercent numeric', () => {
+    const r = noteTermsSchema.safeParse({ ...base, principal: '250,000', distributionAmount: '3,750' });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.principal).toBe(25_000_000);
+      expect(r.data.distributionAmount).toBe(375_000);
+      expect(r.data.ratePercent).toBe(18);
+    }
+  });
+  it('allows a small distribution amount (no $100k minimum)', () => {
+    expect(noteTermsSchema.safeParse({ ...base, principal: '250,000', distributionAmount: '500' }).success).toBe(true);
+  });
+  it('bounds the recurring day to 1–28', () => {
+    expect(noteTermsSchema.safeParse({ ...base, distributionDay: '31', principal: '250,000', distributionAmount: '3,750' }).success).toBe(false);
+  });
+});
+
+describe('credentials + password policy', () => {
+  it('accepts a strong password, rejects weak ones', () => {
+    expect(credentialsSchema.safeParse({ password: 'Sunrise2026x' }).success).toBe(true);
+    expect(credentialsSchema.safeParse({ password: 'short1' }).success).toBe(false);
+    expect(credentialsSchema.safeParse({ password: 'alllettersonly' }).success).toBe(false);
+  });
+  it('password change requires current + strong new', () => {
+    expect(passwordChangeSchema.safeParse({ currentPassword: 'x', newPassword: 'Sunrise2026x' }).success).toBe(true);
+    expect(passwordChangeSchema.safeParse({ currentPassword: '', newPassword: 'Sunrise2026x' }).success).toBe(false);
   });
 });

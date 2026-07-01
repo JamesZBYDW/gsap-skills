@@ -9,7 +9,9 @@ import { utcDate } from '../src/lib/dates';
 const prisma = new PrismaClient();
 
 const ARGON2_OPTS = { memoryCost: 19_456, timeCost: 2, parallelism: 1 } as const;
-const NOW = new Date();
+// Fixed "as of" date so the seeded demo is deterministic (Margaret shows a
+// stable 14 of 24 paid regardless of the real clock), matching the prototype.
+const AS_OF = new Date(Date.UTC(2026, 5, 30)); // Jun 30, 2026
 
 function hashPw(pw: string) {
   return hash(pw, ARGON2_OPTS);
@@ -129,8 +131,6 @@ const investorsSeed: SeedInvestor[] = [
 async function reset() {
   // Delete in FK-safe order.
   await prisma.auditLog.deleteMany();
-  await prisma.requestHistory.deleteMany();
-  await prisma.request.deleteMany();
   await prisma.message.deleteMany();
   await prisma.document.deleteMany();
   await prisma.distribution.deleteMany();
@@ -218,7 +218,7 @@ async function seedInvestors() {
       if (isActive && wireDate) {
         const schedule = generateSchedule(wireDate, s.termMonths!, distributionDay, monthly);
         for (const d of schedule) {
-          const paid = d.dueDate <= NOW;
+          const paid = d.dueDate <= AS_OF;
           await prisma.distribution.create({
             data: {
               noteId: note.id,
@@ -285,79 +285,6 @@ async function seedRegistrations() {
   }
 }
 
-async function seedRequests(ids: Record<string, string>) {
-  const requests = [
-    {
-      investorId: ids.vance!, type: 'UPDATE_BANKING' as const, title: 'Update ACH details',
-      detail: 'Move distributions to Chase account ending 7781.', status: 'NEEDS_INFO' as const,
-      note: 'For your security, banking changes are confirmed by phone before they take effect.',
-      createdAt: utcDate(2026, 5, 24),
-      history: [
-        { label: 'Submitted', dateText: 'Jun 24, 2026', done: true },
-        { label: 'Reviewed by Investor Relations', dateText: 'Jun 24, 2026', done: true },
-        { label: 'Phone confirmation', dateText: 'Scheduled Jun 25, 2:30pm ET', done: false },
-      ],
-    },
-    {
-      investorId: ids.vance!, type: 'MATURITY_ELECTION' as const, title: 'Maturity election — renew for 24 months',
-      detail: 'Renew the note for another 24-month term at maturity.', status: 'PENDING_REVIEW' as const, note: '',
-      createdAt: utcDate(2026, 5, 28),
-      history: [{ label: 'Submitted', dateText: 'Jun 28, 2026', done: true }],
-    },
-    {
-      investorId: ids.vance!, type: 'DOCUMENT' as const, title: 'Request mid-year statement',
-      detail: 'Mid-year 2026 summary for my records.', status: 'COMPLETED' as const, note: '',
-      createdAt: utcDate(2026, 5, 2),
-      history: [
-        { label: 'Submitted', dateText: 'Jun 2, 2026', done: true },
-        { label: 'Document delivered', dateText: 'Jun 2, 2026', done: true },
-      ],
-    },
-    {
-      investorId: ids.beckett!, type: 'MATURITY_ELECTION' as const, title: 'Redeem at maturity',
-      detail: 'Please redeem in full at maturity on Jul 21.', status: 'PENDING_REVIEW' as const, note: '',
-      createdAt: utcDate(2026, 5, 27),
-      history: [{ label: 'Submitted', dateText: 'Jun 27, 2026', done: true }],
-    },
-    {
-      investorId: ids.okafor!, type: 'ADD_CAPITAL' as const, title: 'Add $100,000 to note',
-      detail: 'Increase principal by $100,000 at the current rate.', status: 'PENDING_REVIEW' as const, note: '',
-      createdAt: utcDate(2026, 5, 28),
-      history: [{ label: 'Submitted', dateText: 'Jun 28, 2026', done: true }],
-    },
-    {
-      investorId: ids.juniper!, type: 'DOCUMENT' as const, title: 'Request K-1 statement',
-      detail: '', status: 'APPROVED' as const, note: '',
-      createdAt: utcDate(2026, 5, 20),
-      history: [
-        { label: 'Submitted', dateText: 'Jun 20, 2026', done: true },
-        { label: 'Approved', dateText: 'Jun 20, 2026', done: true },
-      ],
-    },
-    {
-      investorId: ids.vancefo!, type: 'UPDATE_PROFILE' as const, title: 'Update primary contact',
-      detail: '', status: 'COMPLETED' as const, note: '',
-      createdAt: utcDate(2026, 5, 18),
-      history: [
-        { label: 'Submitted', dateText: 'Jun 18, 2026', done: true },
-        { label: 'Completed', dateText: 'Jun 18, 2026', done: true },
-      ],
-    },
-  ];
-
-  for (const r of requests) {
-    const { history, ...rest } = r;
-    await prisma.request.create({
-      data: {
-        ...rest,
-        history: {
-          create: history.map((h, i) => ({ ...h, order: i })),
-        },
-      },
-    });
-  }
-}
-
 async function seedMessages(ids: Record<string, string>) {
   const team = 'James · Investor Relations';
   const threads: Array<{ investorId: string; investorName: string; msgs: Array<{ author: 'INVESTOR' | 'TEAM'; text: string; sentAt: Date; readByTeam?: boolean; readByInvestor?: boolean }> }> = [
@@ -418,10 +345,9 @@ async function main() {
   await seedTeamUser();
   console.log('Seeding investors + notes + schedules…');
   const ids = await seedInvestors();
-  console.log('Seeding documents, registrations, requests, messages…');
+  console.log('Seeding documents, registrations, messages…');
   await seedDocuments(ids.vance!);
   await seedRegistrations();
-  await seedRequests(ids);
   await seedMessages(ids);
   console.log('Seed complete.');
   console.log(`  Investor login: ${process.env.SEED_INVESTOR_EMAIL ?? 'm.vance@gmail.com'}`);
