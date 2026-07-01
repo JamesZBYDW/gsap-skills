@@ -91,10 +91,9 @@ export interface InvestorRowVM {
     principalDollars: string;
     ratePercent: string;
     status: InvestorState;
+    termMonths: number;
+    wireReceivedISO: string;
     firstDistributionISO: string;
-    distributionDay: number;
-    amountDollars: string;
-    maturityISO: string;
   };
 }
 
@@ -123,10 +122,9 @@ export async function getInvestorsRoster(): Promise<InvestorRowVM[]> {
       principalDollars: i.note && i.note.principalCents ? dollars(i.note.principalCents) : '',
       ratePercent: i.note && i.note.rateBps ? String(i.note.rateBps / 100) : '',
       status: i.state,
+      termMonths: i.note && i.note.termMonths ? i.note.termMonths : 24,
+      wireReceivedISO: i.note?.wireDate ? toISODate(i.note.wireDate) : '',
       firstDistributionISO: i.note?.firstDistributionDate ? toISODate(i.note.firstDistributionDate) : '',
-      distributionDay: i.note?.distributionDay ?? 1,
-      amountDollars: i.note && i.note.monthlyAmountCents ? dollars(i.note.monthlyAmountCents) : '',
-      maturityISO: i.note?.maturityDate ? toISODate(i.note.maturityDate) : '',
     },
   }));
 }

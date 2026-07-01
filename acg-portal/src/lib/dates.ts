@@ -60,6 +60,11 @@ export function formatWeekdayDate(d: Date): string {
   return `${WEEKDAYS[d.getDay()]} · ${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
+/** Add n whole days (UTC). */
+export function addDays(date: Date, n: number): Date {
+  return new Date(startOfUTCDay(date).getTime() + n * MS_PER_DAY);
+}
+
 /** Add n calendar months, clamping the day to the target month's length. */
 export function addMonths(date: Date, n: number): Date {
   const y = date.getUTCFullYear();

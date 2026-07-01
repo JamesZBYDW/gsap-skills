@@ -19,10 +19,11 @@ You can exercise the flows:
   update notification toggles; change your password. (There is no self-registration
   and no in-app messaging — investors sign in with credentials management issues.)
 - **Management:** portfolio overview, investor roster, and a **Create account** tab
-  where you enter an investor's details, **note terms** (principal, fixed rate,
-  status, first distribution date, recurring day, amount, maturity), and **login
-  credentials** (email + password) in one step. From an investor's detail panel you
-  can also update their note terms and reset their login later.
+  where you enter an investor's details, **note terms** (principal, fixed rate, term,
+  wire-received date, first distribution date, status — the distribution amount and
+  maturity date auto-populate), and **login credentials** (email + password) in one
+  step. From an investor's detail panel you can also update their note terms and
+  reset their login later.
 
 ## What this is — and isn't
 

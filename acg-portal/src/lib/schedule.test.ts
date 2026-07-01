@@ -39,22 +39,24 @@ describe('generateSchedule', () => {
   });
 });
 
-describe('generateScheduleBetween (management-entered terms)', () => {
-  it('runs monthly from the first distribution to maturity on the recurring day', () => {
-    const s = generateScheduleBetween(utcDate(2026, 7, 1), 1, 375_000, utcDate(2028, 6, 1));
-    expect(s).toHaveLength(24);
-    expect(formatDate(s[0]!.dueDate)).toBe('Aug 1, 2026');
-    expect(formatDate(s[23]!.dueDate)).toBe('Jul 1, 2028');
+describe('generateScheduleBetween (management-entered terms, 30-day cadence)', () => {
+  it('runs every 30 days from the first distribution up to maturity', () => {
+    // First Aug 1, 2026; each subsequent +30 days; maturity Nov 1, 2026.
+    const s = generateScheduleBetween(utcDate(2026, 7, 1), 375_000, utcDate(2026, 10, 1));
+    expect(s.map((d) => formatDate(d.dueDate))).toEqual([
+      'Aug 1, 2026', 'Aug 31, 2026', 'Sep 30, 2026', 'Oct 30, 2026',
+    ]);
     expect(s.every((d) => d.amountCents === 375_000)).toBe(true);
   });
-  it('honors an explicit first date that differs from the recurring day', () => {
-    const s = generateScheduleBetween(utcDate(2026, 7, 15), 1, 1000, utcDate(2026, 10, 1));
-    expect(s.map((d) => formatDate(d.dueDate))).toEqual([
-      'Aug 15, 2026', 'Sep 1, 2026', 'Oct 1, 2026', 'Nov 1, 2026',
-    ]);
+  it('includes a distribution that lands exactly on maturity', () => {
+    // 60 days after Aug 1 is Sep 30; maturity Sep 30 is included.
+    const s = generateScheduleBetween(utcDate(2026, 7, 1), 1000, utcDate(2026, 8, 30));
+    expect(s).toHaveLength(3);
+    expect(formatDate(s[2]!.dueDate)).toBe('Sep 30, 2026');
   });
-  it('returns nothing without a maturity date', () => {
-    expect(generateScheduleBetween(utcDate(2026, 7, 1), 1, 1000, null)).toEqual([]);
+  it('returns nothing without a maturity date or when maturity precedes the start', () => {
+    expect(generateScheduleBetween(utcDate(2026, 7, 1), 1000, null)).toEqual([]);
+    expect(generateScheduleBetween(utcDate(2026, 7, 1), 1000, utcDate(2026, 6, 1))).toEqual([]);
   });
 });
 

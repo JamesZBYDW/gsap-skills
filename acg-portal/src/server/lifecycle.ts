@@ -1,6 +1,7 @@
 import 'server-only';
 import { prisma } from '@/lib/db';
-import { generateScheduleBetween } from '@/lib/schedule';
+import { generateScheduleBetween, computeMaturity } from '@/lib/schedule';
+import { monthlyDistributionCents } from '@/lib/money';
 import { parseISODate } from '@/lib/dates';
 import { hashPassword, verifyPassword } from '@/lib/password';
 import { audit } from '@/lib/audit';
@@ -45,10 +46,9 @@ export async function createInvestorAccount(
       principal: input.principal,
       ratePercent: input.ratePercent,
       status: input.status,
+      termMonths: input.termMonths,
+      wireReceivedDate: input.wireReceivedDate,
       firstDistributionDate: input.firstDistributionDate,
-      distributionDay: input.distributionDay,
-      distributionAmount: input.distributionAmount,
-      maturityDate: input.maturityDate,
     },
     actorUserId,
     ip,
@@ -75,20 +75,25 @@ export async function setNoteTerms(
 
   const rateBps = Math.round(input.ratePercent * 100);
   const principalCents = input.principal ?? 0;
-  const amountCents = input.distributionAmount ?? 0;
+  const termMonths = input.termMonths;
+  // Per-distribution amount is derived from principal × rate ÷ 12 (auto-populated
+  // in the UI, recomputed authoritatively here).
+  const amountCents = monthlyDistributionCents(principalCents, rateBps);
+  const wireDate = parseISODate(input.wireReceivedDate);
   const first = parseISODate(input.firstDistributionDate);
-  const maturity = parseISODate(input.maturityDate);
+  // Maturity is the term anniversary of the wire-received date.
+  const maturity = wireDate ? computeMaturity(wireDate, termMonths) : null;
   const active = input.status === 'ACTIVE';
 
   if (active) {
-    if (!first || !maturity) throw new HttpError(400, 'Active notes need a first distribution date and maturity date.');
-    if (maturity < first) throw new HttpError(400, 'Maturity date must be on or after the first distribution date.');
-    if (amountCents <= 0) throw new HttpError(400, 'Enter a distribution amount to activate the note.');
+    if (!wireDate) throw new HttpError(400, 'Active notes need a wire-received date.');
+    if (!first) throw new HttpError(400, 'Active notes need a first distribution date.');
+    if (principalCents <= 0) throw new HttpError(400, 'Enter the principal to activate the note.');
+    if (maturity && first > maturity) throw new HttpError(400, 'First distribution must be on or before maturity.');
   }
 
-  // The full planned schedule (length is independent of the amount).
-  const planned = first && maturity ? generateScheduleBetween(first, input.distributionDay, amountCents, maturity) : [];
-  const termMonths = planned.length || investor.note?.termMonths || 0;
+  // Distributions land on the first date, then every 30 days through maturity.
+  const planned = active && first && maturity ? generateScheduleBetween(first, amountCents, maturity) : [];
   const noteStatus = active ? 'ACTIVE' : 'AWAITING';
 
   const noteData = {
@@ -96,9 +101,9 @@ export async function setNoteTerms(
     rateBps,
     termMonths,
     monthlyAmountCents: amountCents,
-    wireDate: active ? investor.note?.wireDate ?? first : investor.note?.wireDate ?? null,
+    wireDate,
     firstDistributionDate: first,
-    distributionDay: input.distributionDay,
+    distributionDay: first ? first.getUTCDate() : 1,
     maturityDate: maturity,
     status: noteStatus as 'ACTIVE' | 'AWAITING',
   };

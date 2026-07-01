@@ -8,6 +8,8 @@ import { SlideOver } from '@/components/ui/SlideOver';
 import { Icon } from '@/components/Icon';
 import { api, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
+import { TERM_OPTIONS } from '@/lib/rates';
+import { computeDistributionDollars, addMonthsISO, formatISOToLong } from '@/lib/noteterms';
 
 const STATES = ['All', 'Active', 'Awaiting'] as const;
 
@@ -91,11 +93,13 @@ function InvestorDetail({
   const [principal, setPrincipal] = useState(e.principalDollars);
   const [ratePercent, setRatePercent] = useState(e.ratePercent);
   const [status, setStatus] = useState<string>(['ACTIVE', 'AWAITING', 'DECLINED'].includes(e.status) ? e.status : 'AWAITING');
+  const [termMonths, setTermMonths] = useState(e.termMonths || 24);
+  const [wireDate, setWireDate] = useState(e.wireReceivedISO);
   const [firstDate, setFirstDate] = useState(e.firstDistributionISO);
-  const [day, setDay] = useState(String(e.distributionDay || 1));
-  const [amount, setAmount] = useState(e.amountDollars);
-  const [maturity, setMaturity] = useState(e.maturityISO);
   const [noteBusy, setNoteBusy] = useState(false);
+
+  const amount = computeDistributionDollars(principal, ratePercent);
+  const maturityISO = addMonthsISO(wireDate, termMonths);
 
   const [loginEmail, setLoginEmail] = useState(investor.email);
   const [password, setPassword] = useState('');
@@ -109,10 +113,9 @@ function InvestorDetail({
         principal,
         ratePercent,
         status,
-        firstDistributionDate: firstDate,
-        distributionDay: day,
-        distributionAmount: amount,
-        maturityDate: maturity,
+        termMonths,
+        wireReceivedDate: wireDate || null,
+        firstDistributionDate: firstDate || null,
       });
       toast('Note terms saved — schedule updated');
       onChanged();
@@ -191,25 +194,34 @@ function InvestorDetail({
             <Field label="FIXED RATE %"><input className="fieldLight" data-testid="mn-rate" placeholder="18" value={ratePercent} onChange={(x) => setRatePercent(x.target.value)} /></Field>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
-            <Field label="DISTRIBUTION AMOUNT"><input className="fieldLight" data-testid="mn-amount" placeholder="3,750" value={amount} onChange={(x) => setAmount(x.target.value)} /></Field>
-            <Field label="RECURRING DAY"><input className="fieldLight" data-testid="mn-day" type="number" min={1} max={28} value={day} onChange={(x) => setDay(x.target.value)} /></Field>
+            <Field label="TERM">
+              <select className="fieldLight" data-testid="mn-term" value={termMonths} onChange={(x) => setTermMonths(Number(x.target.value))}>
+                {TERM_OPTIONS.map((t) => (
+                  <option key={t.months} value={t.months}>{t.yearsLabel}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="DISTRIBUTION AMOUNT (AUTO)"><input className="fieldLight" data-testid="mn-amount" value={amount ? `$${amount}` : '—'} readOnly tabIndex={-1} style={{ background: 'rgba(12,31,61,.04)', color: '#5b6473' }} /></Field>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
+            <Field label="WIRE RECEIVED"><input className="fieldLight" data-testid="mn-wire" type="date" value={wireDate} onChange={(x) => setWireDate(x.target.value)} /></Field>
             <Field label="FIRST DISTRIBUTION"><input className="fieldLight" data-testid="mn-first" type="date" value={firstDate} onChange={(x) => setFirstDate(x.target.value)} /></Field>
-            <Field label="MATURITY DATE"><input className="fieldLight" data-testid="mn-maturity" type="date" value={maturity} onChange={(x) => setMaturity(x.target.value)} /></Field>
           </div>
-          <Field label="STATUS">
-            <select className="fieldLight" data-testid="mn-status" value={status} onChange={(x) => setStatus(x.target.value)}>
-              <option value="AWAITING">Awaiting</option>
-              <option value="ACTIVE">Active</option>
-              <option value="DECLINED">Declined</option>
-            </select>
-          </Field>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <Field label="MATURITY (AUTO)"><input className="fieldLight" data-testid="mn-maturity" value={maturityISO ? formatISOToLong(maturityISO) : '—'} readOnly tabIndex={-1} style={{ background: 'rgba(12,31,61,.04)', color: '#5b6473' }} /></Field>
+            <Field label="STATUS">
+              <select className="fieldLight" data-testid="mn-status" value={status} onChange={(x) => setStatus(x.target.value)}>
+                <option value="AWAITING">Awaiting</option>
+                <option value="ACTIVE">Active</option>
+                <option value="DECLINED">Declined</option>
+              </select>
+            </Field>
+          </div>
           <button className="btnPrimary" data-testid="mn-save" style={{ padding: '11px 18px', fontSize: '.84rem', borderRadius: 10 }} onClick={saveNote} disabled={noteBusy}>
             {noteBusy ? 'Saving…' : 'Save note & regenerate schedule'}
           </button>
           <div style={{ fontSize: '.74rem', color: '#8b93a3' }}>
-            Set status to Active with a first distribution date, recurring day, amount and maturity — the investor&apos;s schedule generates from these.
+            Distribution amount (principal × rate ÷ 12) and maturity (wire-received date + term) auto-populate. Set status to Active with a wire-received and first distribution date — distributions recur every 30 days and the schedule regenerates from these.
           </div>
         </div>
       </div>

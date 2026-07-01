@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MIN_PRINCIPAL_CENTS, MAX_PRINCIPAL_CENTS } from './rates';
+import { MIN_PRINCIPAL_CENTS, MAX_PRINCIPAL_CENTS, isSupportedTerm } from './rates';
 import { parseMoneyToCents } from './money';
 
 export const RoleEnum = z.enum(['INVESTOR', 'TEAM']);
@@ -43,8 +43,11 @@ const principalCentsField = moneyCents({
   minMsg: 'Minimum investment is $100,000.',
   max: MAX_PRINCIPAL_CENTS,
 });
-// Per-distribution amount — no $100k minimum.
-const amountCentsField = moneyCents({ min: 1, minMsg: 'Enter a distribution amount.', max: MAX_PRINCIPAL_CENTS });
+// A published, counsel-approved term (12/18/24/36 months → 1 / 1.5 / 2 / 3 years).
+const termMonthsField = z.coerce
+  .number()
+  .int()
+  .refine(isSupportedTerm, { message: 'Choose a 1, 1.5, 2, or 3 year term.' });
 
 const isoDate = z
   .string()
@@ -61,15 +64,16 @@ const passwordField = z
     message: 'Password must include both letters and numbers.',
   });
 
-// Management sets the note terms; drives the investor's schedule.
+// Management sets the note terms; drives the investor's schedule. The
+// per-distribution amount and the maturity date are DERIVED server-side (from
+// principal × rate ÷ 12, and wire-received date + term) — not entered.
 export const noteTermsSchema = z.object({
   principal: principalCentsField,
   ratePercent: z.coerce.number().min(0, 'Rate cannot be negative.').max(100, 'Rate looks too high.'),
   status: z.enum(['AWAITING', 'ACTIVE', 'DECLINED']),
+  termMonths: termMonthsField,
+  wireReceivedDate: isoDate,
   firstDistributionDate: isoDate,
-  distributionDay: z.coerce.number().int().min(1, 'Day 1–28.').max(28, 'Day 1–28.'),
-  distributionAmount: amountCentsField,
-  maturityDate: isoDate,
 });
 
 // Management provisions or resets an investor login.
@@ -89,14 +93,13 @@ export const createAccountSchema = z.object({
   loginEmail: z.string().email('Enter a valid login email.').max(320).optional(),
   password: passwordField,
   mustChange: z.boolean().optional().default(true),
-  // Note terms.
+  // Note terms (distribution amount + maturity date are derived server-side).
   principal: principalCentsField,
   ratePercent: z.coerce.number().min(0, 'Rate cannot be negative.').max(100, 'Rate looks too high.'),
   status: z.enum(['AWAITING', 'ACTIVE', 'DECLINED']).default('AWAITING'),
+  termMonths: termMonthsField.default(24),
+  wireReceivedDate: isoDate,
   firstDistributionDate: isoDate,
-  distributionDay: z.coerce.number().int().min(1, 'Day 1–28.').max(28, 'Day 1–28.').default(1),
-  distributionAmount: amountCentsField,
-  maturityDate: isoDate,
 });
 
 // Investor changes their own password (from Profile).

@@ -1,4 +1,7 @@
-import { addMonths, firstDistributionAfter } from './dates';
+import { addMonths, addDays, firstDistributionAfter } from './dates';
+
+/** Days between recurring distributions (each one 30 days after the previous). */
+export const DISTRIBUTION_INTERVAL_DAYS = 30;
 
 export type DistributionDisplayStatus = 'PAID' | 'NEXT' | 'UPCOMING';
 
@@ -46,29 +49,19 @@ export function distributionReference(index: number): string {
 /**
  * Generate a schedule from an explicit management-entered first distribution
  * date through a maturity date: the first payment lands on `start` exactly, and
- * each subsequent payment on `day` (clamped to that month) until `maturity`.
- * Returns [] if `maturity` is missing or precedes `start`.
+ * each subsequent payment falls 30 days after the previous one, up to and
+ * including `maturity`. Returns [] if either date is missing or `maturity`
+ * precedes `start`.
  */
 export function generateScheduleBetween(
   start: Date,
-  day: number,
   amountCents: number,
   maturity: Date | null,
 ): GeneratedDistribution[] {
-  if (!maturity) return [];
-  const startY = start.getUTCFullYear();
-  const startM = start.getUTCMonth();
+  if (!maturity || maturity < start) return [];
   const out: GeneratedDistribution[] = [];
   for (let i = 0; i < 600; i++) {
-    let due: Date;
-    if (i === 0) {
-      due = new Date(Date.UTC(startY, startM, start.getUTCDate()));
-    } else {
-      const ms = new Date(Date.UTC(startY, startM + i, 1));
-      const lastDay = new Date(Date.UTC(ms.getUTCFullYear(), ms.getUTCMonth() + 1, 0)).getUTCDate();
-      ms.setUTCDate(Math.min(day, lastDay));
-      due = ms;
-    }
+    const due = addDays(start, i * DISTRIBUTION_INTERVAL_DAYS);
     if (due > maturity) break;
     out.push({ index: i + 1, dueDate: due, amountCents });
   }

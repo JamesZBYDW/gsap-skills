@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/Icon';
 import { api, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
+import { TERM_OPTIONS } from '@/lib/rates';
+import { computeDistributionDollars, addMonthsISO, formatISOToLong } from '@/lib/noteterms';
 
 type AccountType = 'INDIVIDUAL' | 'ENTITY';
 
@@ -22,11 +24,10 @@ export function CreateAccountView() {
   // Note terms
   const [principal, setPrincipal] = useState('');
   const [ratePercent, setRatePercent] = useState('');
-  const [status, setStatus] = useState('AWAITING');
-  const [amount, setAmount] = useState('');
-  const [day, setDay] = useState('1');
+  const [termMonths, setTermMonths] = useState(24);
+  const [wireDate, setWireDate] = useState('');
   const [firstDate, setFirstDate] = useState('');
-  const [maturity, setMaturity] = useState('');
+  const [status, setStatus] = useState('AWAITING');
 
   // Login credentials (login email defaults to the contact email until edited).
   const [loginEmail, setLoginEmail] = useState('');
@@ -37,6 +38,8 @@ export function CreateAccountView() {
   const [busy, setBusy] = useState(false);
 
   const effectiveLoginEmail = loginTouched ? loginEmail : email;
+  const distributionAmount = computeDistributionDollars(principal, ratePercent);
+  const maturityISO = addMonthsISO(wireDate, termMonths);
 
   function onEmailChange(v: string) {
     setEmail(v);
@@ -55,7 +58,7 @@ export function CreateAccountView() {
   async function submit() {
     setBusy(true);
     try {
-      const res = await api.post<{ investorId: string }>('/api/team/accounts', {
+      await api.post<{ investorId: string }>('/api/team/accounts', {
         name,
         email,
         type,
@@ -65,15 +68,13 @@ export function CreateAccountView() {
         principal,
         ratePercent: ratePercent || '0',
         status,
-        distributionAmount: amount,
-        distributionDay: day || '1',
+        termMonths,
+        wireReceivedDate: wireDate || null,
         firstDistributionDate: firstDate || null,
-        maturityDate: maturity || null,
       });
       toast(`Account created — share ${effectiveLoginEmail} + password with ${name}`);
       router.push('/console/investors');
       router.refresh();
-      void res;
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'Could not create account');
       setBusy(false);
@@ -113,22 +114,35 @@ export function CreateAccountView() {
               <Field label="FIXED RATE %"><input className="fieldLight" data-testid="ca-rate" placeholder="18" value={ratePercent} onChange={(e) => setRatePercent(e.target.value)} /></Field>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
-              <Field label="DISTRIBUTION AMOUNT"><input className="fieldLight" data-testid="ca-amount" placeholder="3,750" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
-              <Field label="RECURRING DAY"><input className="fieldLight" data-testid="ca-day" type="number" min={1} max={28} value={day} onChange={(e) => setDay(e.target.value)} /></Field>
+              <Field label="TERM">
+                <select className="fieldLight" data-testid="ca-term" value={termMonths} onChange={(e) => setTermMonths(Number(e.target.value))}>
+                  {TERM_OPTIONS.map((t) => (
+                    <option key={t.months} value={t.months}>{t.yearsLabel}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="DISTRIBUTION AMOUNT (AUTO)">
+                <input className="fieldLight" data-testid="ca-amount" value={distributionAmount ? `$${distributionAmount}` : '—'} readOnly tabIndex={-1} style={{ background: 'rgba(12,31,61,.04)', color: '#5b6473' }} />
+              </Field>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
+              <Field label="WIRE RECEIVED"><input className="fieldLight" data-testid="ca-wire" type="date" value={wireDate} onChange={(e) => setWireDate(e.target.value)} /></Field>
               <Field label="FIRST DISTRIBUTION"><input className="fieldLight" data-testid="ca-first" type="date" value={firstDate} onChange={(e) => setFirstDate(e.target.value)} /></Field>
-              <Field label="MATURITY DATE"><input className="fieldLight" data-testid="ca-maturity" type="date" value={maturity} onChange={(e) => setMaturity(e.target.value)} /></Field>
             </div>
-            <Field label="STATUS">
-              <select className="fieldLight" data-testid="ca-status" value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="AWAITING">Awaiting</option>
-                <option value="ACTIVE">Active</option>
-                <option value="DECLINED">Declined</option>
-              </select>
-            </Field>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <Field label="MATURITY (AUTO)">
+                <input className="fieldLight" data-testid="ca-maturity" value={maturityISO ? formatISOToLong(maturityISO) : '—'} readOnly tabIndex={-1} style={{ background: 'rgba(12,31,61,.04)', color: '#5b6473' }} />
+              </Field>
+              <Field label="STATUS">
+                <select className="fieldLight" data-testid="ca-status" value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="AWAITING">Awaiting</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="DECLINED">Declined</option>
+                </select>
+              </Field>
+            </div>
             <div style={{ fontSize: '.74rem', color: '#8b93a3' }}>
-              Set status to Active with a first distribution date, recurring day, amount and maturity to generate the schedule now. Leave as Awaiting to set terms later from the investor&apos;s detail panel.
+              Distribution amount is principal × rate ÷ 12; maturity is the wire-received date plus the term. Distributions recur every 30 days from the first distribution date. Set status to Active with a wire-received date and first distribution date to generate the schedule now.
             </div>
           </div>
         </div>

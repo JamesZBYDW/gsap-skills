@@ -61,11 +61,12 @@ test('management sets terms + login on an existing investor; they sign in and se
 
   await page.getByTestId('mn-principal').fill('750,000');
   await page.getByTestId('mn-rate').fill('15');
-  await page.getByTestId('mn-amount').fill('9,375');
-  await page.getByTestId('mn-day').fill('1');
+  await page.getByTestId('mn-term').selectOption('18'); // 1.5 years
+  await page.getByTestId('mn-wire').fill('2026-08-01');
   await page.getByTestId('mn-first').fill('2026-08-01');
-  await page.getByTestId('mn-maturity').fill('2028-02-01');
   await page.getByTestId('mn-status').selectOption('ACTIVE');
+  // Distribution amount ($9,375) and maturity auto-populate from the inputs.
+  await expect(page.getByTestId('mn-amount')).toHaveValue('$9,375');
   await page.getByTestId('mn-save').click();
   await expect(page.getByText('Note terms saved — schedule updated')).toBeVisible();
 
@@ -110,11 +111,12 @@ test('management creates an account; investor is forced to set a password, then 
   await page.getByTestId('ca-type-entity').click();
   await page.getByTestId('ca-principal').fill('600,000');
   await page.getByTestId('ca-rate').fill('15');
-  await page.getByTestId('ca-amount').fill('7,500');
-  await page.getByTestId('ca-day').fill('1');
+  await page.getByTestId('ca-term').selectOption('24'); // 2 years
+  await page.getByTestId('ca-wire').fill('2026-09-01');
   await page.getByTestId('ca-first').fill('2026-09-01');
-  await page.getByTestId('ca-maturity').fill('2028-03-01');
   await page.getByTestId('ca-status').selectOption('ACTIVE');
+  // Distribution amount ($7,500) auto-populates from principal × rate ÷ 12.
+  await expect(page.getByTestId('ca-amount')).toHaveValue('$7,500');
   // Login email defaults to the contact email; keep "require change" checked.
   await page.getByTestId('ca-password').fill(issued);
   await page.getByTestId('ca-submit').click();

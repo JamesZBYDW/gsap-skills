@@ -84,7 +84,11 @@ export async function getOverview(investorId: string, now = new Date()): Promise
   const paidCount = note.distributions.filter((d) => d.paidDate).length;
   const next = note.distributions.find((d) => statuses.get(d.index) === 'NEXT') ?? null;
   const term = note.termMonths;
-  const fraction = paidCount / term;
+  // Progress and counts are over the actual generated schedule length, which may
+  // differ from termMonths (distributions recur every 30 days, not monthly).
+  const total = note.distributions.length;
+  const remaining = Math.max(0, total - paidCount);
+  const fraction = total > 0 ? paidCount / total : 0;
 
   return {
     ...base,
@@ -103,11 +107,11 @@ export async function getOverview(investorId: string, now = new Date()): Promise
           circumference: CIRC,
           dash: fraction * CIRC,
           dateLabel: formatDateLong(note.maturityDate),
-          remaining: `${Math.max(0, term - paidCount)} months remaining`,
-          paidLabel: `${paidCount} of ${term} distributions paid`,
+          remaining: `${remaining} distribution${remaining === 1 ? '' : 's'} remaining`,
+          paidLabel: `${paidCount} of ${total} distributions paid`,
         }
       : null,
-    distributed: { amount: formatUSD(paidCount * note.monthlyAmountCents), count: `${paidCount} of ${term}` },
+    distributed: { amount: formatUSD(paidCount * note.monthlyAmountCents), count: `${paidCount} of ${total}` },
     bars: note.distributions.map((d) => ({ status: statuses.get(d.index)! })),
     termRangeStart: formatMonthYear(note.distributions[0]!.dueDate),
     termRangeEnd: formatMonthYear(note.distributions[note.distributions.length - 1]!.dueDate),
@@ -165,7 +169,8 @@ export async function getSchedule(investorId: string, now = new Date()): Promise
   const statuses = deriveStatuses(note.distributions);
   const paidCount = note.distributions.filter((d) => d.paidDate).length;
   const next = note.distributions.find((d) => statuses.get(d.index) === 'NEXT') ?? null;
-  const remainingCount = note.termMonths - paidCount;
+  // Remaining is over the actual schedule length (30-day cadence), not termMonths.
+  const remainingCount = Math.max(0, note.distributions.length - paidCount);
 
   const ledger: LedgerRowVM[] = note.distributions.map((d) => {
     const status = statuses.get(d.index)!;

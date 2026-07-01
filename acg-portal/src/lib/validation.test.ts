@@ -22,8 +22,12 @@ describe('createAccountSchema', () => {
       expect(r.data.type).toBe('INDIVIDUAL');
       expect(r.data.status).toBe('AWAITING');
       expect(r.data.mustChange).toBe(true);
-      expect(r.data.distributionDay).toBe(1);
+      expect(r.data.termMonths).toBe(24);
     }
+  });
+  it('rejects an unsupported term', () => {
+    expect(createAccountSchema.safeParse({ ...baseCreate, termMonths: '13' }).success).toBe(false);
+    expect(createAccountSchema.safeParse({ ...baseCreate, termMonths: '18' }).success).toBe(true);
   });
   it('requires a valid contact email and a strong password', () => {
     expect(createAccountSchema.safeParse({ ...baseCreate, email: 'nope' }).success).toBe(false);
@@ -55,21 +59,29 @@ describe('principal validation/transform (create account)', () => {
 });
 
 describe('noteTermsSchema', () => {
-  const base = { ratePercent: '18', status: 'ACTIVE', distributionDay: '1', firstDistributionDate: '2026-08-01', maturityDate: '2028-08-01' };
-  it('transforms principal + amount to cents; keeps ratePercent numeric', () => {
-    const r = noteTermsSchema.safeParse({ ...base, principal: '250,000', distributionAmount: '3,750' });
+  const base = { ratePercent: '18', status: 'ACTIVE', termMonths: '24', wireReceivedDate: '2026-06-01', firstDistributionDate: '2026-07-01' };
+  it('transforms principal to cents; keeps ratePercent numeric; coerces the term', () => {
+    const r = noteTermsSchema.safeParse({ ...base, principal: '250,000' });
     expect(r.success).toBe(true);
     if (r.success) {
       expect(r.data.principal).toBe(25_000_000);
-      expect(r.data.distributionAmount).toBe(375_000);
       expect(r.data.ratePercent).toBe(18);
+      expect(r.data.termMonths).toBe(24);
     }
   });
-  it('allows a small distribution amount (no $100k minimum)', () => {
-    expect(noteTermsSchema.safeParse({ ...base, principal: '250,000', distributionAmount: '500' }).success).toBe(true);
+  it('accepts each published term (1 / 1.5 / 2 / 3 years) and rejects others', () => {
+    for (const t of ['12', '18', '24', '36']) {
+      expect(noteTermsSchema.safeParse({ ...base, termMonths: t, principal: '250,000' }).success).toBe(true);
+    }
+    expect(noteTermsSchema.safeParse({ ...base, termMonths: '30', principal: '250,000' }).success).toBe(false);
   });
-  it('bounds the recurring day to 1–28', () => {
-    expect(noteTermsSchema.safeParse({ ...base, distributionDay: '31', principal: '250,000', distributionAmount: '3,750' }).success).toBe(false);
+  it('leaves dates optional (blank → null) for an Awaiting shell', () => {
+    const r = noteTermsSchema.safeParse({ ratePercent: '0', status: 'AWAITING', termMonths: '12', principal: '' });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.wireReceivedDate).toBeNull();
+      expect(r.data.firstDistributionDate).toBeNull();
+    }
   });
 });
 
