@@ -18,7 +18,7 @@ async function signIn(page: P, role: 'Investor' | 'Investor Relations', email: s
   await page.getByRole('button', { name: 'Sign in' }).click();
 }
 
-test('investor sees their note overview with exact figures', async ({ page }) => {
+test('investor sees their note overview with exact figures and the full ledger', async ({ page }) => {
   await signIn(page, 'Investor', INVESTOR_EMAIL, INVESTOR_PASSWORD);
   await page.waitForURL('**/portal/overview');
   await expect(page.getByText('Good morning, Margaret')).toBeVisible();
@@ -26,15 +26,22 @@ test('investor sees their note overview with exact figures', async ({ page }) =>
   await expect(page.getByText('18.0%')).toBeVisible();
   await expect(page.getByText('14 of 24 distributions paid')).toBeVisible();
   await expect(page.getByText('April 14, 2027')).toBeVisible();
+  // The distribution ledger now lives on the overview (one page).
+  await expect(page.getByText('DISTRIBUTION SCHEDULE')).toBeVisible();
+  await expect(page.getByText('ACH·2407')).toBeVisible();
 });
 
-test('investor nav is trimmed — no Requests, no Messages', async ({ page }) => {
+test('investor nav is trimmed — Overview, Documents, Profile only', async ({ page }) => {
   await signIn(page, 'Investor', INVESTOR_EMAIL, INVESTOR_PASSWORD);
   await page.waitForURL('**/portal/overview');
   await expect(page.getByRole('link', { name: 'Requests' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Messages' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Schedule' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Schedule' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Documents' })).toBeVisible();
+  // Documents starts with no sample data.
+  await page.getByRole('link', { name: 'Documents' }).click();
+  await page.waitForURL('**/portal/documents');
+  await expect(page.getByText(/No documents yet/)).toBeVisible();
 });
 
 test('team nav/overview reflect no registrations or messages; Create account is present', async ({ page }) => {
@@ -86,8 +93,7 @@ test('management sets terms + login on an existing investor; they sign in and se
   await page.waitForURL('**/portal/overview');
   await expect(page.getByText('$750,000')).toBeVisible();
 
-  await page.getByRole('link', { name: 'Schedule' }).click();
-  await page.waitForURL('**/portal/schedule');
+  // The management-entered schedule is right on the overview page.
   await expect(page.getByText('Aug 1, 2026').first()).toBeVisible();
   await expect(page.getByText('$9,375').first()).toBeVisible();
 });
@@ -136,8 +142,7 @@ test('management creates an account; investor is forced to set a password, then 
   await page.waitForURL('**/portal/overview');
   await expect(page.getByText('$600,000')).toBeVisible();
 
-  await page.getByRole('link', { name: 'Schedule' }).click();
-  await page.waitForURL('**/portal/schedule');
+  // The generated schedule appears directly on the overview page.
   await expect(page.getByText('Sep 1, 2026').first()).toBeVisible();
   await expect(page.getByText('$7,500').first()).toBeVisible();
 

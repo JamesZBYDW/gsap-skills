@@ -17,10 +17,20 @@ async function loadNote(investorId: string) {
   });
 }
 
-// ─── A. Overview ────────────────────────────────────────────────────────────
+// ─── A. Overview (note dashboard + full distribution ledger, one page) ──────
 
 export interface BarVM {
   status: DistributionDisplayStatus;
+}
+
+export interface LedgerRowVM {
+  n: number;
+  date: string;
+  amount: string;
+  statusLabel: string;
+  tone: Tone;
+  status: DistributionDisplayStatus;
+  ref: string;
 }
 
 export interface OverviewVM {
@@ -48,6 +58,7 @@ export interface OverviewVM {
   bars: BarVM[];
   termRangeStart: string;
   termRangeEnd: string;
+  ledger: LedgerRowVM[];
 }
 
 export async function getOverview(investorId: string, now = new Date()): Promise<OverviewVM> {
@@ -77,6 +88,7 @@ export async function getOverview(investorId: string, now = new Date()): Promise
       bars: [],
       termRangeStart: '',
       termRangeEnd: '',
+      ledger: [],
     };
   }
 
@@ -115,90 +127,18 @@ export async function getOverview(investorId: string, now = new Date()): Promise
     bars: note.distributions.map((d) => ({ status: statuses.get(d.index)! })),
     termRangeStart: formatMonthYear(note.distributions[0]!.dueDate),
     termRangeEnd: formatMonthYear(note.distributions[note.distributions.length - 1]!.dueDate),
-  };
-}
-
-// ─── B. Schedule ──────────────────────────────────────────────────────────
-
-export interface LedgerRowVM {
-  n: number;
-  date: string;
-  amount: string;
-  statusLabel: string;
-  tone: Tone;
-  status: DistributionDisplayStatus;
-  ref: string;
-}
-
-export interface ScheduleVM {
-  active: boolean;
-  distributedAmount: string;
-  paidCount: number;
-  termMonths: number;
-  nextDate: string | null;
-  nextAmount: string | null;
-  nextArrival: string | null;
-  remainingAmount: string;
-  remainingCount: number;
-  rangeStart: string;
-  rangeEnd: string;
-  bars: BarVM[];
-  ledger: LedgerRowVM[];
-}
-
-export async function getSchedule(investorId: string, now = new Date()): Promise<ScheduleVM> {
-  const note = await loadNote(investorId);
-  if (!note || note.status !== 'ACTIVE' || note.distributions.length === 0) {
-    return {
-      active: false,
-      distributedAmount: '$0',
-      paidCount: 0,
-      termMonths: note?.termMonths ?? 0,
-      nextDate: null,
-      nextAmount: null,
-      nextArrival: null,
-      remainingAmount: '$0',
-      remainingCount: 0,
-      rangeStart: '',
-      rangeEnd: '',
-      bars: [],
-      ledger: [],
-    };
-  }
-
-  const statuses = deriveStatuses(note.distributions);
-  const paidCount = note.distributions.filter((d) => d.paidDate).length;
-  const next = note.distributions.find((d) => statuses.get(d.index) === 'NEXT') ?? null;
-  // Remaining is over the actual schedule length (30-day cadence), not termMonths.
-  const remainingCount = Math.max(0, note.distributions.length - paidCount);
-
-  const ledger: LedgerRowVM[] = note.distributions.map((d) => {
-    const status = statuses.get(d.index)!;
-    return {
-      n: d.index,
-      date: formatDate(d.dueDate),
-      amount: formatUSD(d.amountCents),
-      statusLabel: distributionStatusLabel[status],
-      tone: distributionTone(status),
-      status,
-      ref: d.reference ?? '—',
-    };
-  });
-
-  return {
-    active: true,
-    distributedAmount: formatUSD(paidCount * note.monthlyAmountCents),
-    paidCount,
-    termMonths: note.termMonths,
-    nextDate: next ? formatDate(next.dueDate) : null,
-    nextAmount: next ? formatUSD(next.amountCents) : null,
-    nextArrival: next ? arrivalLabel(next.dueDate, now) : null,
-    remainingAmount: formatUSD(remainingCount * note.monthlyAmountCents),
-    remainingCount,
-    rangeStart: formatMonthYear(note.distributions[0]!.dueDate),
-    rangeEnd: formatMonthYear(note.distributions[note.distributions.length - 1]!.dueDate),
-    bars: note.distributions.map((d) => ({ status: statuses.get(d.index)! })),
-    ledger,
+    ledger: note.distributions.map((d) => {
+      const status = statuses.get(d.index)!;
+      return {
+        n: d.index,
+        date: formatDate(d.dueDate),
+        amount: formatUSD(d.amountCents),
+        statusLabel: distributionStatusLabel[status],
+        tone: distributionTone(status),
+        status,
+        ref: d.reference ?? '—',
+      };
+    }),
   };
 }
 

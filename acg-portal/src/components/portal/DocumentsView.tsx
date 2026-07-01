@@ -4,6 +4,17 @@ import { Icon } from '@/components/Icon';
 const COLS = '1.8fr 1fr 1fr 90px';
 
 export function DocumentsView({ documents }: { documents: DocumentVM[] }) {
+  if (documents.length === 0) {
+    return (
+      <div className="content">
+        <div className="empty">
+          No documents yet — statements, tax forms, and agreements will appear here
+          as Investor Relations issues them.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="content">
       <div className="card" style={{ padding: '8px 24px 14px' }}>

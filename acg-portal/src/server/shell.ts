@@ -22,7 +22,6 @@ export async function getInvestorShell(
 
   const nav: NavItemData[] = [
     { href: '/portal/overview', label: 'Overview', icon: 'grid' },
-    { href: '/portal/schedule', label: 'Schedule', icon: 'calendar' },
     { href: '/portal/documents', label: 'Documents', icon: 'file' },
     { href: '/portal/profile', label: 'Profile', icon: 'user' },
   ];

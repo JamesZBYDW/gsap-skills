@@ -236,29 +236,15 @@ async function seedTeamUser() {
   });
 }
 
-async function seedDocuments(vanceId: string) {
-  const docs = [
-    { name: 'Distribution statement — June 2026', kind: 'STATEMENT' as const, issuedDate: utcDate(2026, 6, 1) },
-    { name: 'Distribution statement — May 2026', kind: 'STATEMENT' as const, issuedDate: utcDate(2026, 5, 1) },
-    { name: 'Mid-year summary — 2026', kind: 'SUMMARY' as const, issuedDate: utcDate(2026, 5, 2) },
-    { name: 'Form 1099-INT — 2025', kind: 'TAX' as const, issuedDate: utcDate(2026, 0, 31) },
-    { name: 'ACG Promissory Note — executed', kind: 'AGREEMENT' as const, issuedDate: utcDate(2025, 3, 14) },
-    { name: 'Subscription agreement', kind: 'AGREEMENT' as const, issuedDate: utcDate(2025, 3, 10) },
-  ];
-  for (const d of docs) {
-    await prisma.document.create({ data: { investorId: vanceId, storageKey: '', ...d } });
-  }
-}
-
 async function main() {
   console.log('Resetting database…');
   await reset();
   console.log('Seeding team user…');
   await seedTeamUser();
   console.log('Seeding investors + notes + schedules…');
-  const ids = await seedInvestors();
-  console.log('Seeding documents…');
-  await seedDocuments(ids.vance!);
+  await seedInvestors();
+  // No sample documents — the Documents tab starts empty until the firm issues
+  // real statements/agreements.
   console.log('Seed complete.');
   console.log(`  Investor login: ${process.env.SEED_INVESTOR_EMAIL ?? 'm.vance@gmail.com'}`);
   console.log(`  Team login:     ${process.env.SEED_TEAM_EMAIL ?? 'james@acg.example'}`);

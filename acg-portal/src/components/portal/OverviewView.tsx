@@ -3,13 +3,20 @@
 import { useRouter } from 'next/navigation';
 import { Icon } from '../Icon';
 import { Pill } from '../ui/Pill';
-import type { OverviewVM, BarVM } from '@/server/portal';
+import type { OverviewVM, BarVM, LedgerRowVM } from '@/server/portal';
 
 function miniBar(b: BarVM): React.CSSProperties {
   const base: React.CSSProperties = { flex: 1, height: '100%', borderRadius: 3 };
   if (b.status === 'PAID') return { ...base, background: 'linear-gradient(180deg,#cdaf7e,#a87e45)' };
   if (b.status === 'NEXT') return { ...base, background: 'var(--acc)' };
   return { ...base, background: 'rgba(12,31,61,.12)' };
+}
+
+function ledgerDot(row: LedgerRowVM): React.CSSProperties {
+  const base: React.CSSProperties = { width: 18, height: 18, borderRadius: '50%', flex: 'none' };
+  if (row.status === 'PAID') return { ...base, background: 'rgba(31,138,91,.14)' };
+  if (row.status === 'NEXT') return { ...base, background: 'var(--acc)', boxShadow: '0 0 0 4px rgba(0,113,227,.14)' };
+  return { ...base, background: 'rgba(12,31,61,.08)' };
 }
 
 export function OverviewView({ vm }: { vm: OverviewVM }) {
@@ -113,9 +120,6 @@ export function OverviewView({ vm }: { vm: OverviewVM }) {
       <div className="card" style={{ gridColumn: 'span 2', padding: '18px 22px', display: 'flex', flexDirection: 'column' }}>
         <div className="tileEyebrow">QUICK ACTIONS</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
-          <button className="quickAction" onClick={() => router.push('/portal/schedule')}>
-            <Icon name="calendar" size={16} color="var(--acc)" />View schedule
-          </button>
           <button className="quickAction" onClick={() => router.push('/portal/documents')}>
             <Icon name="file" size={16} color="var(--acc)" />Documents
           </button>
@@ -123,6 +127,46 @@ export function OverviewView({ vm }: { vm: OverviewVM }) {
             <Icon name="user" size={16} color="var(--acc)" />Account &amp; profile
           </button>
         </div>
+      </div>
+
+      {/* Distribution ledger (full width) — the complete schedule on one page */}
+      <div className="card" style={{ gridColumn: '1 / -1', padding: '8px 24px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '16px 0 0' }}>
+          <div className="tileEyebrow">DISTRIBUTION SCHEDULE</div>
+          <div style={{ fontSize: '.72rem', color: '#8b93a3', fontWeight: 600 }}>
+            {vm.termRangeStart} — {vm.termRangeEnd}
+          </div>
+        </div>
+        <div
+          className="tableHead"
+          style={{ display: 'grid', gridTemplateColumns: '48px 1.4fr 1fr 1fr 1fr', padding: '14px 0 12px' }}
+        >
+          <div>#</div>
+          <div>Distribution date</div>
+          <div>Amount</div>
+          <div>Status</div>
+          <div>Reference</div>
+        </div>
+        {vm.ledger.map((row) => (
+          <div
+            key={row.n}
+            className="tableRow"
+            style={{ display: 'grid', gridTemplateColumns: '48px 1.4fr 1fr 1fr 1fr', alignItems: 'center', padding: '13px 0' }}
+          >
+            <div style={{ fontSize: '.78rem', color: '#9aa1ad', fontWeight: 600 }}>{row.n}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+              <span style={ledgerDot(row)} />
+              <span style={{ fontSize: '.88rem', fontWeight: 600 }}>{row.date}</span>
+            </div>
+            <div style={{ fontSize: '.88rem', fontWeight: 700 }}>{row.amount}</div>
+            <div>
+              <Pill tone={row.tone}>{row.statusLabel}</Pill>
+            </div>
+            <div style={{ fontSize: '.8rem', color: '#9aa1ad' }} className="mono">
+              {row.ref}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

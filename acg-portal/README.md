@@ -31,10 +31,10 @@ a Postgres database, server-side authorization, and an audit trail.
 
 | Investor portal (`/portal/*`) | Team console (`/console/*`) |
 |---|---|
-| Overview (note dashboard) | Portfolio overview |
-| Schedule & ledger | Investors roster + detail |
-| Documents (access-controlled) | **Create account** (details + terms + login) |
-| Profile (banking, accreditation, notifications, change password) | Investor detail: **set note terms** + **provision login** |
+| Overview (note dashboard **+ full distribution ledger**, one page) | Portfolio overview |
+| Documents (access-controlled; starts empty until the firm issues them) | Investors roster + detail |
+| Profile (banking, accreditation, notifications, change password) | **Create account** (details + terms + login) |
+| | Investor detail: **set note terms** + **provision login** |
 
 Access is gated by real permissions (no client-side role trust). Investors see
 only their own note, schedule, and documents. Management creates each investor's
@@ -60,7 +60,7 @@ account, and out-of-band contact (email/phone) is used for anything conversation
   are **derived automatically**: the per-distribution amount (principal × rate ÷
   12) and the maturity date (wire-received date + term). Distributions **recur
   every 30 days** from the first distribution date through maturity. Saving
-  regenerates the schedule, which the investor sees on their Overview and Schedule.
+  regenerates the schedule, which the investor sees right on their Overview.
 
 ## Local development
 
@@ -153,7 +153,7 @@ prisma/                       schema + migrations + seed
    date, first distribution date, status; amount and maturity are derived) — at
    creation or later from the investor's detail panel → the distribution
    **schedule regenerates** (every 30 days through maturity) → the investor sees
-   it on Overview + Schedule.
+   it directly on their Overview page.
 
 ## Compliance & security
 

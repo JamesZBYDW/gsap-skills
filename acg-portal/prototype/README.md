@@ -15,9 +15,11 @@ sides from the sidebar footer.
 
 You can exercise the flows:
 
-- **Investor:** view the note overview, distribution schedule, and documents;
-  update notification toggles; change your password. (There is no self-registration
-  and no in-app messaging — investors sign in with credentials management issues.)
+- **Investor:** one **Overview** page with the note dashboard and the full
+  distribution ledger (date, amount, status, reference); Documents (starts empty
+  until the firm issues them); update notification toggles; change your password.
+  (There is no self-registration and no in-app messaging — investors sign in with
+  credentials management issues.)
 - **Management:** portfolio overview, investor roster, and a **Create account** tab
   where you enter an investor's details, **note terms** (principal, fixed rate, term,
   wire-received date, first distribution date, status — the distribution amount and
