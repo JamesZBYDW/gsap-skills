@@ -12,6 +12,30 @@ checklist) see `DEPLOY.md` in this folder.
 - **Stack:** Next.js 15 (App Router) + React 19 + TypeScript · PostgreSQL + Prisma.
 - You can deploy directly from the branch — no need to merge the draft PR first.
 
+## What you're deploying (current behavior)
+
+Two-sided portal, fully **management-driven** — there is no investor
+self-registration, no in-app messaging, and no requests/registrations queues:
+
+- **Team console** (`/console/*`): portfolio overview (KPIs + notes maturing
+  ≤ 90 days) · investors roster + detail · **Create account** — one form that
+  creates the investor (name, contact email, phone, type), the note, and the
+  login. Management enters only **principal, fixed rate, term (1/1.5/2/3 yr),
+  and the wire-received date**; the app derives the per-distribution amount
+  (principal × rate ÷ 12), first distribution (wire + 30 days), 30-day cadence,
+  maturity (wire + term), and status (**Awaiting → Active on wire → Expired**
+  after the final distribution, which also returns the principal). From an
+  investor's detail panel management can edit profile data (identity, phone,
+  banking), update note terms, reset the login, and open a read-only, audited
+  impersonation view.
+- **Investor portal** (`/portal/*`): one-page **Overview** (note dashboard +
+  full distribution ledger + 90-day maturity notice) · Documents (empty until
+  the firm issues them) · Profile (read-only data, notification toggles,
+  change password). Investors sign in with management-issued credentials and
+  are **forced to set their own password on first sign-in**.
+- **Security:** Argon2id, DB-backed sessions, RBAC, lockout + rate limiting,
+  same-origin CSRF, strict CSP, immutable audit log.
+
 ---
 
 ## 0. Prerequisites
@@ -37,6 +61,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"  
 | `DOCUMENT_URL_SECRET` | ✅ | 48+ random bytes (above). Signs document download links. |
 | `APP_URL` | ✅ | Public staging URL, e.g. `https://acg-staging.example.com` |
 | `NODE_ENV` | ✅ | `production` (marks cookies Secure, enables HSTS) |
+| `DEMO_LOGIN_EMAIL` | optional | Prefills the login email field (demo convenience). Leave unset for staging — the field starts empty. |
 
 Do **not** set the `SEED_*` variables on the running app; they're only used by the
 one-off seed step below.
@@ -121,25 +146,30 @@ defaults in `.env.example` if you omit them).
 
 ---
 
-## Post-deploy smoke test (2 min)
+## Post-deploy smoke test (3 min)
 
-1. Open `APP_URL` → redirects to `/login`.
+1. Open `APP_URL` → redirects to `/login` (sign-in only; no self-registration).
 2. Sign in as the **Investor** (Margaret) → `/portal/overview` shows
-   **$250,000**, **18.0%**, **$3,750**, "14 of 24 distributions paid", matures
-   **April 14, 2027**.
-3. Sign out; sign in as **Investor Relations** (team) → `/console/overview` shows
-   the portfolio KPIs and approaching maturities. Open **Create account**, enter a
-   test investor (details + note terms + login) and save; the new investor then
-   signs in and is prompted to set their own password.
-4. Confirm HTTPS and that the response carries `Strict-Transport-Security` and
+   **$250,000**, **18.0%**, "14 of 24 distributions paid", maturity
+   **April 14, 2027**, and the full distribution ledger on the same page
+   (final row **$253,750** — the principal returns with the last distribution).
+3. Sign out; sign in as **Investor Relations** (team) → `/console/overview`
+   shows the portfolio KPIs and approaching maturities. Open **Create account**:
+   enter a name, contact email, phone, principal, rate, term, and a
+   wire-received date — watch amount / first distribution / maturity / status
+   auto-populate — plus a login email + password, then save.
+4. Sign out; sign in as that new investor → you're **forced to set a new
+   password** → the overview shows the derived schedule; Profile shows the
+   phone management entered.
+5. Confirm HTTPS and that the response carries `Strict-Transport-Security` and
    `Content-Security-Policy` headers (they're set in `next.config.mjs`).
 
 If you want to run the automated checks against staging:
 
 ```bash
 cd acg-portal && npm install
-npm test                                   # 48 unit tests
-E2E_BASE_URL="https://acg-staging.example.com" npm run test:e2e   # Playwright smoke
+npm test                                   # 59 unit tests
+E2E_BASE_URL="https://acg-staging.example.com" npm run test:e2e   # Playwright smoke (5 flows)
 ```
 
 ---
