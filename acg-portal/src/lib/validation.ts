@@ -64,16 +64,16 @@ const passwordField = z
     message: 'Password must include both letters and numbers.',
   });
 
-// Management sets the note terms; drives the investor's schedule. The
-// per-distribution amount and the maturity date are DERIVED server-side (from
-// principal × rate ÷ 12, and wire-received date + term) — not entered.
+// Management sets the note terms; drives the investor's schedule. Everything
+// else is DERIVED server-side: amount = principal × rate ÷ 12, first
+// distribution = wire + 30 days, maturity = wire + term, and status flips to
+// Active once the wire-received date is set (Expired after the final,
+// principal-bearing distribution).
 export const noteTermsSchema = z.object({
   principal: principalCentsField,
   ratePercent: z.coerce.number().min(0, 'Rate cannot be negative.').max(100, 'Rate looks too high.'),
-  status: z.enum(['AWAITING', 'ACTIVE', 'DECLINED']),
   termMonths: termMonthsField,
   wireReceivedDate: isoDate,
-  firstDistributionDate: isoDate,
 });
 
 // Management provisions or resets an investor login.
@@ -93,13 +93,12 @@ export const createAccountSchema = z.object({
   loginEmail: z.string().email('Enter a valid login email.').max(320).optional(),
   password: passwordField,
   mustChange: z.boolean().optional().default(true),
-  // Note terms (distribution amount + maturity date are derived server-side).
+  // Note terms (amount, first distribution, maturity, and status are derived
+  // server-side from these + the wire-received date).
   principal: principalCentsField,
   ratePercent: z.coerce.number().min(0, 'Rate cannot be negative.').max(100, 'Rate looks too high.'),
-  status: z.enum(['AWAITING', 'ACTIVE', 'DECLINED']).default('AWAITING'),
   termMonths: termMonthsField.default(24),
   wireReceivedDate: isoDate,
-  firstDistributionDate: isoDate,
 });
 
 // Investor changes their own password (from Profile).

@@ -1,8 +1,8 @@
 import 'server-only';
 import { prisma } from '@/lib/db';
-import { generateScheduleBetween, computeMaturity } from '@/lib/schedule';
+import { generateScheduleBetween, computeMaturity, DISTRIBUTION_INTERVAL_DAYS } from '@/lib/schedule';
 import { monthlyDistributionCents } from '@/lib/money';
-import { parseISODate } from '@/lib/dates';
+import { parseISODate, addDays } from '@/lib/dates';
 import { hashPassword, verifyPassword } from '@/lib/password';
 import { audit } from '@/lib/audit';
 import { HttpError } from '@/lib/http';
@@ -45,10 +45,8 @@ export async function createInvestorAccount(
     {
       principal: input.principal,
       ratePercent: input.ratePercent,
-      status: input.status,
       termMonths: input.termMonths,
       wireReceivedDate: input.wireReceivedDate,
-      firstDistributionDate: input.firstDistributionDate,
     },
     actorUserId,
     ip,
@@ -76,24 +74,24 @@ export async function setNoteTerms(
   const rateBps = Math.round(input.ratePercent * 100);
   const principalCents = input.principal ?? 0;
   const termMonths = input.termMonths;
-  // Per-distribution amount is derived from principal × rate ÷ 12 (auto-populated
-  // in the UI, recomputed authoritatively here).
+  // Everything downstream derives from the wire-received date:
+  //   amount = principal × rate ÷ 12; first distribution = wire + 30 days;
+  //   maturity = wire + term; status = Active the moment a wire date is set
+  //   (and Expired — derived at read time — after the final distribution).
   const amountCents = monthlyDistributionCents(principalCents, rateBps);
   const wireDate = parseISODate(input.wireReceivedDate);
-  const first = parseISODate(input.firstDistributionDate);
-  // Maturity is the term anniversary of the wire-received date.
+  const first = wireDate ? addDays(wireDate, DISTRIBUTION_INTERVAL_DAYS) : null;
   const maturity = wireDate ? computeMaturity(wireDate, termMonths) : null;
-  const active = input.status === 'ACTIVE';
+  const active = !!wireDate;
 
   if (active) {
-    if (!wireDate) throw new HttpError(400, 'Active notes need a wire-received date.');
-    if (!first) throw new HttpError(400, 'Active notes need a first distribution date.');
-    if (principalCents <= 0) throw new HttpError(400, 'Enter the principal to activate the note.');
-    if (maturity && first > maturity) throw new HttpError(400, 'First distribution must be on or before maturity.');
+    if (principalCents <= 0) throw new HttpError(400, 'Enter the principal before recording the wire.');
+    if (amountCents <= 0) throw new HttpError(400, 'Set a fixed rate before recording the wire.');
   }
 
-  // Distributions land on the first date, then every 30 days through maturity.
-  const planned = active && first && maturity ? generateScheduleBetween(first, amountCents, maturity) : [];
+  // Distributions land 30 days after the wire, then every 30 days through
+  // maturity; the final one also returns the principal.
+  const planned = active && first ? generateScheduleBetween(first, amountCents, maturity, principalCents) : [];
   const noteStatus = active ? 'ACTIVE' : 'AWAITING';
 
   const noteData = {
@@ -109,7 +107,7 @@ export async function setNoteTerms(
   };
 
   await prisma.$transaction(async (tx) => {
-    await tx.investor.update({ where: { id: investorId }, data: { state: input.status } });
+    await tx.investor.update({ where: { id: investorId }, data: { state: noteStatus } });
     const note = await tx.note.upsert({
       where: { investorId },
       create: { investorId, ...noteData },
@@ -128,10 +126,10 @@ export async function setNoteTerms(
     actorUserId,
     targetType: 'Investor',
     targetId: investorId,
-    metadata: { status: input.status, rateBps, principalCents, amountCents, distributions: active ? planned.length : 0 },
+    metadata: { status: noteStatus, rateBps, principalCents, amountCents, distributions: active ? planned.length : 0 },
     ip,
   });
-  await audit({ action: 'INVESTOR_STATE_CHANGE', actorUserId, targetType: 'Investor', targetId: investorId, metadata: { to: input.status }, ip });
+  await audit({ action: 'INVESTOR_STATE_CHANGE', actorUserId, targetType: 'Investor', targetId: investorId, metadata: { to: noteStatus }, ip });
 }
 
 // ─── Credentials ─────────────────────────────────────────────────────────────

@@ -22,10 +22,10 @@ You can exercise the flows:
   credentials management issues.)
 - **Management:** portfolio overview, investor roster, and a **Create account** tab
   where you enter an investor's details, **note terms** (principal, fixed rate, term,
-  wire-received date, first distribution date, status — the distribution amount and
-  maturity date auto-populate), and **login credentials** (email + password) in one
-  step. From an investor's detail panel you can also update their note terms and
-  reset their login later.
+  wire-received date — the distribution amount, first distribution, maturity, and
+  status all auto-derive), and **login credentials** (email + password) in one step.
+  From an investor's detail panel you can also update their note terms and reset
+  their login later.
 
 ## What this is — and isn't
 

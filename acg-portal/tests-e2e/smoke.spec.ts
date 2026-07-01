@@ -29,6 +29,9 @@ test('investor sees their note overview with exact figures and the full ledger',
   // The distribution ledger now lives on the overview (one page).
   await expect(page.getByText('DISTRIBUTION SCHEDULE')).toBeVisible();
   await expect(page.getByText('ACH·2407')).toBeVisible();
+  // Maturity-notice tile (replaces monthly income); outside the 90-day window.
+  await expect(page.getByText('NOTICES')).toBeVisible();
+  await expect(page.getByText(/90 days before your note expires/)).toBeVisible();
 });
 
 test('investor nav is trimmed — Overview, Documents, Profile only', async ({ page }) => {
@@ -70,10 +73,12 @@ test('management sets terms + login on an existing investor; they sign in and se
   await page.getByTestId('mn-rate').fill('15');
   await page.getByTestId('mn-term').selectOption('18'); // 1.5 years
   await page.getByTestId('mn-wire').fill('2026-08-01');
-  await page.getByTestId('mn-first').fill('2026-08-01');
-  await page.getByTestId('mn-status').selectOption('ACTIVE');
-  // Distribution amount ($9,375) and maturity auto-populate from the inputs.
+  // Everything else auto-derives: amount ($9,375), first distribution (wire +
+  // 30 days), maturity (wire + term), and status flips to Active on the wire.
   await expect(page.getByTestId('mn-amount')).toHaveValue('$9,375');
+  await expect(page.getByTestId('mn-first')).toHaveValue('August 31, 2026');
+  await expect(page.getByTestId('mn-maturity')).toHaveValue('February 1, 2028');
+  await expect(page.getByTestId('mn-status')).toHaveValue('Active');
   await page.getByTestId('mn-save').click();
   await expect(page.getByText('Note terms saved — schedule updated')).toBeVisible();
 
@@ -93,8 +98,9 @@ test('management sets terms + login on an existing investor; they sign in and se
   await page.waitForURL('**/portal/overview');
   await expect(page.getByText('$750,000')).toBeVisible();
 
-  // The management-entered schedule is right on the overview page.
-  await expect(page.getByText('Aug 1, 2026').first()).toBeVisible();
+  // The derived schedule (first distribution = wire + 30 days) is right on the
+  // overview page.
+  await expect(page.getByText('Aug 31, 2026').first()).toBeVisible();
   await expect(page.getByText('$9,375').first()).toBeVisible();
 });
 
@@ -119,10 +125,10 @@ test('management creates an account; investor is forced to set a password, then 
   await page.getByTestId('ca-rate').fill('15');
   await page.getByTestId('ca-term').selectOption('24'); // 2 years
   await page.getByTestId('ca-wire').fill('2026-09-01');
-  await page.getByTestId('ca-first').fill('2026-09-01');
-  await page.getByTestId('ca-status').selectOption('ACTIVE');
-  // Distribution amount ($7,500) auto-populates from principal × rate ÷ 12.
+  // Amount, first distribution, maturity, and status all auto-derive.
   await expect(page.getByTestId('ca-amount')).toHaveValue('$7,500');
+  await expect(page.getByTestId('ca-first')).toHaveValue('October 1, 2026');
+  await expect(page.getByTestId('ca-status')).toHaveValue('Active');
   // Login email defaults to the contact email; keep "require change" checked.
   await page.getByTestId('ca-password').fill(issued);
   await page.getByTestId('ca-submit').click();
@@ -142,8 +148,9 @@ test('management creates an account; investor is forced to set a password, then 
   await page.waitForURL('**/portal/overview');
   await expect(page.getByText('$600,000')).toBeVisible();
 
-  // The generated schedule appears directly on the overview page.
-  await expect(page.getByText('Sep 1, 2026').first()).toBeVisible();
+  // The derived schedule (first distribution = wire + 30 days) appears
+  // directly on the overview page.
+  await expect(page.getByText('Oct 1, 2026').first()).toBeVisible();
   await expect(page.getByText('$7,500').first()).toBeVisible();
 
   // The new password sticks: sign out and back in with it, no forced screen.

@@ -6,7 +6,7 @@ import { Icon } from '@/components/Icon';
 import { api, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
 import { TERM_OPTIONS } from '@/lib/rates';
-import { computeDistributionDollars, addMonthsISO, formatISOToLong } from '@/lib/noteterms';
+import { computeDistributionDollars, addMonthsISO, addDaysISO, formatISOToLong } from '@/lib/noteterms';
 
 type AccountType = 'INDIVIDUAL' | 'ENTITY';
 
@@ -26,8 +26,6 @@ export function CreateAccountView() {
   const [ratePercent, setRatePercent] = useState('');
   const [termMonths, setTermMonths] = useState(24);
   const [wireDate, setWireDate] = useState('');
-  const [firstDate, setFirstDate] = useState('');
-  const [status, setStatus] = useState('AWAITING');
 
   // Login credentials (login email defaults to the contact email until edited).
   const [loginEmail, setLoginEmail] = useState('');
@@ -39,7 +37,9 @@ export function CreateAccountView() {
 
   const effectiveLoginEmail = loginTouched ? loginEmail : email;
   const distributionAmount = computeDistributionDollars(principal, ratePercent);
+  const firstISO = addDaysISO(wireDate, 30);
   const maturityISO = addMonthsISO(wireDate, termMonths);
+  const autoStatus = wireDate ? 'Active' : 'Awaiting wire';
 
   function onEmailChange(v: string) {
     setEmail(v);
@@ -67,10 +67,8 @@ export function CreateAccountView() {
         mustChange,
         principal,
         ratePercent: ratePercent || '0',
-        status,
         termMonths,
         wireReceivedDate: wireDate || null,
-        firstDistributionDate: firstDate || null,
       });
       toast(`Account created — share ${effectiveLoginEmail} + password with ${name}`);
       router.push('/console/investors');
@@ -127,22 +125,20 @@ export function CreateAccountView() {
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <Field label="WIRE RECEIVED"><input className="fieldLight" data-testid="ca-wire" type="date" value={wireDate} onChange={(e) => setWireDate(e.target.value)} /></Field>
-              <Field label="FIRST DISTRIBUTION"><input className="fieldLight" data-testid="ca-first" type="date" value={firstDate} onChange={(e) => setFirstDate(e.target.value)} /></Field>
+              <Field label="FIRST DISTRIBUTION (AUTO)">
+                <input className="fieldLight" data-testid="ca-first" value={firstISO ? formatISOToLong(firstISO) : '—'} readOnly tabIndex={-1} style={{ background: 'rgba(12,31,61,.04)', color: '#5b6473' }} />
+              </Field>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <Field label="MATURITY (AUTO)">
                 <input className="fieldLight" data-testid="ca-maturity" value={maturityISO ? formatISOToLong(maturityISO) : '—'} readOnly tabIndex={-1} style={{ background: 'rgba(12,31,61,.04)', color: '#5b6473' }} />
               </Field>
-              <Field label="STATUS">
-                <select className="fieldLight" data-testid="ca-status" value={status} onChange={(e) => setStatus(e.target.value)}>
-                  <option value="AWAITING">Awaiting</option>
-                  <option value="ACTIVE">Active</option>
-                  <option value="DECLINED">Declined</option>
-                </select>
+              <Field label="STATUS (AUTO)">
+                <input className="fieldLight" data-testid="ca-status" value={autoStatus} readOnly tabIndex={-1} style={{ background: 'rgba(12,31,61,.04)', color: '#5b6473' }} />
               </Field>
             </div>
             <div style={{ fontSize: '.74rem', color: '#8b93a3' }}>
-              Distribution amount is principal × rate ÷ 12; maturity is the wire-received date plus the term. Distributions recur every 30 days from the first distribution date. Set status to Active with a wire-received date and first distribution date to generate the schedule now.
+              Everything derives from the wire-received date: the note goes Active when it&apos;s set, the first distribution lands 30 days later, distributions recur every 30 days, the final one returns the principal, and the note expires after it. Amount = principal × rate ÷ 12; maturity = wire date + term. Leave the wire date blank to create the account as Awaiting.
             </div>
           </div>
         </div>

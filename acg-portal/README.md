@@ -55,12 +55,17 @@ account, and out-of-band contact (email/phone) is used for anything conversation
   generated one), hashed and persisted for real sign-in. On their **first sign-in**
   the investor is **forced to set their own password** before they can enter the
   portal; they can change it again anytime in Profile.
-- **Management sets the note terms** — principal, fixed rate, term (1 / 1.5 / 2 /
-  3 years), wire-received date, first distribution date, and status. Two values
-  are **derived automatically**: the per-distribution amount (principal × rate ÷
-  12) and the maturity date (wire-received date + term). Distributions **recur
-  every 30 days** from the first distribution date through maturity. Saving
-  regenerates the schedule, which the investor sees right on their Overview.
+- **Management enters four things** — principal, fixed rate, term (1 / 1.5 / 2 /
+  3 years), and the **wire-received date**. Everything else derives: the
+  per-distribution amount (principal × rate ÷ 12), the **first distribution**
+  (wire + 30 days), each subsequent distribution **every 30 days**, the maturity
+  date (wire + term), and the **status** — Awaiting until the wire is recorded,
+  **Active** the moment it is, and **Expired** after the final distribution,
+  which also **returns the principal**. Saving regenerates the schedule, which
+  the investor sees right on their Overview.
+- **90-day expiry notice** — inside the 90-day pre-expiry window the investor's
+  Overview shows a maturity notice (in place of the monthly-income tile), and
+  management sees the note in the team overview's "Maturing ≤ 90 days" panel.
 
 ## Local development
 
@@ -149,11 +154,12 @@ prisma/                       schema + migrations + seed
 2. **Forced first sign-in:** the investor signs in with the management-issued
    credentials against real database records → is **forced to set their own
    password** before entering the portal → can change it again later in Profile.
-3. **Management sets/updates the note terms** (principal, rate, term, wire-received
-   date, first distribution date, status; amount and maturity are derived) — at
-   creation or later from the investor's detail panel → the distribution
-   **schedule regenerates** (every 30 days through maturity) → the investor sees
-   it directly on their Overview page.
+3. **Management sets/updates the note terms** (principal, rate, term, and the
+   wire-received date; amount, first distribution, maturity, and status are all
+   derived) — at creation or later from the investor's detail panel → the
+   **schedule regenerates** (first distribution 30 days after the wire, then
+   every 30 days; the final one returns the principal) → the investor sees it
+   directly on their Overview, with a maturity notice in the last 90 days.
 
 ## Compliance & security
 

@@ -93,10 +93,30 @@ export function OverviewView({ vm }: { vm: OverviewVM }) {
       <StatTile label="FIXED RATE" value={vm.rate} sub={vm.rateSub} />
       <div className="card" style={{ padding: '18px 20px' }}>
         <div className="tileEyebrow">STATUS</div>
-        <div className="tileValue" style={{ marginTop: 10, color: 'var(--ok)' }}>{vm.statusLabel}</div>
+        <div className="tileValue" style={{ marginTop: 10, color: vm.notice.level === 'expired' ? '#8b93a3' : 'var(--ok)' }}>{vm.statusLabel}</div>
         <div className="tileSub">{vm.statusSub}</div>
       </div>
-      <StatTile label="MONTHLY INCOME" value={vm.monthly} sub="on the 1st" />
+      {/* Maturity notice — lights up inside the 90-day pre-expiry window */}
+      <div
+        className="card"
+        style={{
+          padding: '18px 20px',
+          ...(vm.notice.level === 'window'
+            ? { background: 'rgba(176,122,30,.08)', border: '1px solid rgba(176,122,30,.25)' }
+            : null),
+        }}
+      >
+        <div className="tileEyebrow" style={vm.notice.level === 'window' ? { color: '#b07a1e' } : undefined}>
+          {vm.notice.level === 'none' ? 'NOTICES' : 'MATURITY NOTICE'}
+        </div>
+        <div
+          className="tileValue"
+          style={{ marginTop: 10, fontSize: '1.15rem', ...(vm.notice.level === 'window' ? { color: '#b07a1e' } : null) }}
+        >
+          {vm.notice.value}
+        </div>
+        <div className="tileSub">{vm.notice.sub}</div>
+      </div>
 
       {/* Distributed to date (span 2) */}
       <div className="card" style={{ gridColumn: 'span 2', padding: '18px 22px' }}>

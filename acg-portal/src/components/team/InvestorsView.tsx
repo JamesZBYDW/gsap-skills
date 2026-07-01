@@ -9,9 +9,9 @@ import { Icon } from '@/components/Icon';
 import { api, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
 import { TERM_OPTIONS } from '@/lib/rates';
-import { computeDistributionDollars, addMonthsISO, formatISOToLong } from '@/lib/noteterms';
+import { computeDistributionDollars, addMonthsISO, addDaysISO, formatISOToLong } from '@/lib/noteterms';
 
-const STATES = ['All', 'Active', 'Awaiting'] as const;
+const STATES = ['All', 'Active', 'Awaiting', 'Expired'] as const;
 
 export function InvestorsView({ investors }: { investors: InvestorRowVM[] }) {
   const router = useRouter();
@@ -92,14 +92,14 @@ function InvestorDetail({
 
   const [principal, setPrincipal] = useState(e.principalDollars);
   const [ratePercent, setRatePercent] = useState(e.ratePercent);
-  const [status, setStatus] = useState<string>(['ACTIVE', 'AWAITING', 'DECLINED'].includes(e.status) ? e.status : 'AWAITING');
   const [termMonths, setTermMonths] = useState(e.termMonths || 24);
   const [wireDate, setWireDate] = useState(e.wireReceivedISO);
-  const [firstDate, setFirstDate] = useState(e.firstDistributionISO);
   const [noteBusy, setNoteBusy] = useState(false);
 
   const amount = computeDistributionDollars(principal, ratePercent);
+  const firstISO = addDaysISO(wireDate, 30);
   const maturityISO = addMonthsISO(wireDate, termMonths);
+  const autoStatus = wireDate ? 'Active' : 'Awaiting wire';
 
   const [loginEmail, setLoginEmail] = useState(investor.email);
   const [password, setPassword] = useState('');
@@ -112,10 +112,8 @@ function InvestorDetail({
       await api.patch(`/api/team/investors/${investor.id}/note`, {
         principal,
         ratePercent,
-        status,
         termMonths,
         wireReceivedDate: wireDate || null,
-        firstDistributionDate: firstDate || null,
       });
       toast('Note terms saved — schedule updated');
       onChanged();
@@ -205,23 +203,17 @@ function InvestorDetail({
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
             <Field label="WIRE RECEIVED"><input className="fieldLight" data-testid="mn-wire" type="date" value={wireDate} onChange={(x) => setWireDate(x.target.value)} /></Field>
-            <Field label="FIRST DISTRIBUTION"><input className="fieldLight" data-testid="mn-first" type="date" value={firstDate} onChange={(x) => setFirstDate(x.target.value)} /></Field>
+            <Field label="FIRST DISTRIBUTION (AUTO)"><input className="fieldLight" data-testid="mn-first" value={firstISO ? formatISOToLong(firstISO) : '—'} readOnly tabIndex={-1} style={{ background: 'rgba(12,31,61,.04)', color: '#5b6473' }} /></Field>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
             <Field label="MATURITY (AUTO)"><input className="fieldLight" data-testid="mn-maturity" value={maturityISO ? formatISOToLong(maturityISO) : '—'} readOnly tabIndex={-1} style={{ background: 'rgba(12,31,61,.04)', color: '#5b6473' }} /></Field>
-            <Field label="STATUS">
-              <select className="fieldLight" data-testid="mn-status" value={status} onChange={(x) => setStatus(x.target.value)}>
-                <option value="AWAITING">Awaiting</option>
-                <option value="ACTIVE">Active</option>
-                <option value="DECLINED">Declined</option>
-              </select>
-            </Field>
+            <Field label="STATUS (AUTO)"><input className="fieldLight" data-testid="mn-status" value={autoStatus} readOnly tabIndex={-1} style={{ background: 'rgba(12,31,61,.04)', color: '#5b6473' }} /></Field>
           </div>
           <button className="btnPrimary" data-testid="mn-save" style={{ padding: '11px 18px', fontSize: '.84rem', borderRadius: 10 }} onClick={saveNote} disabled={noteBusy}>
             {noteBusy ? 'Saving…' : 'Save note & regenerate schedule'}
           </button>
           <div style={{ fontSize: '.74rem', color: '#8b93a3' }}>
-            Distribution amount (principal × rate ÷ 12) and maturity (wire-received date + term) auto-populate. Set status to Active with a wire-received and first distribution date — distributions recur every 30 days and the schedule regenerates from these.
+            Everything derives from the wire-received date: the note goes Active when it&apos;s set, the first distribution lands 30 days later, distributions recur every 30 days, the final one returns the principal, and the note expires after it. Amount = principal × rate ÷ 12; maturity = wire date + term.
           </div>
         </div>
       </div>

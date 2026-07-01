@@ -90,42 +90,44 @@ export interface InvestorRowVM {
   edit: {
     principalDollars: string;
     ratePercent: string;
-    status: InvestorState;
     termMonths: number;
     wireReceivedISO: string;
-    firstDistributionISO: string;
   };
 }
 
 const dollars = (cents: number) => String(Math.round(cents) / 100);
 
-export async function getInvestorsRoster(): Promise<InvestorRowVM[]> {
+export async function getInvestorsRoster(now = new Date()): Promise<InvestorRowVM[]> {
   const investors = await prisma.investor.findMany({
     orderBy: { createdAt: 'asc' },
     include: { note: true, user: { select: { id: true } } },
   });
-  return investors.map((i) => ({
-    id: i.id,
-    name: i.legalName,
-    type: i.type === 'ENTITY' ? 'Entity' : 'Individual',
-    state: i.state,
-    stateLabel: investorStateLabel[i.state],
-    tone: investorStateTone(i.state),
-    principal: i.note && i.note.principalCents ? formatUSD(i.note.principalCents) : '—',
-    rate: i.note && i.note.rateBps ? formatRate(i.note.rateBps) : '—',
-    term: i.note && i.note.termMonths ? `${i.note.termMonths} mo` : '—',
-    email: i.email,
-    wire: i.note?.wireDate ? formatDate(i.note.wireDate) : '—',
-    maturity: i.note?.maturityDate ? formatDate(i.note.maturityDate) : '—',
-    hasLogin: !!i.user,
-    edit: {
-      principalDollars: i.note && i.note.principalCents ? dollars(i.note.principalCents) : '',
-      ratePercent: i.note && i.note.rateBps ? String(i.note.rateBps / 100) : '',
-      status: i.state,
-      termMonths: i.note && i.note.termMonths ? i.note.termMonths : 24,
-      wireReceivedISO: i.note?.wireDate ? toISODate(i.note.wireDate) : '',
-      firstDistributionISO: i.note?.firstDistributionDate ? toISODate(i.note.firstDistributionDate) : '',
-    },
-  }));
+  const today = startOfUTCDay(now);
+  return investors.map((i) => {
+    // Expired is derived, not stored: an active note past its maturity has made
+    // its final (principal-bearing) distribution.
+    const expired = i.state === 'ACTIVE' && !!i.note?.maturityDate && i.note.maturityDate < today;
+    return {
+      id: i.id,
+      name: i.legalName,
+      type: i.type === 'ENTITY' ? 'Entity' : 'Individual',
+      state: i.state,
+      stateLabel: expired ? 'Expired' : investorStateLabel[i.state],
+      tone: expired ? 'mute' : investorStateTone(i.state),
+      principal: i.note && i.note.principalCents ? formatUSD(i.note.principalCents) : '—',
+      rate: i.note && i.note.rateBps ? formatRate(i.note.rateBps) : '—',
+      term: i.note && i.note.termMonths ? `${i.note.termMonths} mo` : '—',
+      email: i.email,
+      wire: i.note?.wireDate ? formatDate(i.note.wireDate) : '—',
+      maturity: i.note?.maturityDate ? formatDate(i.note.maturityDate) : '—',
+      hasLogin: !!i.user,
+      edit: {
+        principalDollars: i.note && i.note.principalCents ? dollars(i.note.principalCents) : '',
+        ratePercent: i.note && i.note.rateBps ? String(i.note.rateBps / 100) : '',
+        termMonths: i.note && i.note.termMonths ? i.note.termMonths : 24,
+        wireReceivedISO: i.note?.wireDate ? toISODate(i.note.wireDate) : '',
+      },
+    };
+  });
 }
 

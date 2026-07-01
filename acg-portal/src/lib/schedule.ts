@@ -1,7 +1,10 @@
-import { addMonths, addDays, firstDistributionAfter } from './dates';
+import { addMonths, addDays } from './dates';
 
 /** Days between recurring distributions (each one 30 days after the previous). */
 export const DISTRIBUTION_INTERVAL_DAYS = 30;
+
+/** Days before maturity at which the expiry notice window opens. */
+export const MATURITY_NOTICE_DAYS = 90;
 
 export type DistributionDisplayStatus = 'PAID' | 'NEXT' | 'UPCOMING';
 
@@ -16,47 +19,24 @@ export function computeMaturity(wireDate: Date, termMonths: number): Date {
   return addMonths(wireDate, termMonths);
 }
 
-/**
- * Generate the full distribution schedule for a note. Distributions fall on
- * `distributionDay` of each month, starting the month after the wire.
- */
-export function generateSchedule(
-  wireDate: Date,
-  termMonths: number,
-  distributionDay: number,
-  monthlyAmountCents: number,
-): GeneratedDistribution[] {
-  const first = firstDistributionAfter(wireDate, distributionDay);
-  const baseYear = first.getUTCFullYear();
-  const baseMonth = first.getUTCMonth();
-  const out: GeneratedDistribution[] = [];
-  for (let i = 0; i < termMonths; i++) {
-    // Anchor each occurrence on `distributionDay`, clamped to that month's
-    // length — so a short first month (e.g. Feb) never drifts later months.
-    const monthStart = new Date(Date.UTC(baseYear, baseMonth + i, 1));
-    const lastDay = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)).getUTCDate();
-    monthStart.setUTCDate(Math.min(distributionDay, lastDay));
-    out.push({ index: i + 1, dueDate: monthStart, amountCents: monthlyAmountCents });
-  }
-  return out;
-}
-
 /** A standard ACH reference for a posted distribution (e.g. "ACH·2407"). */
 export function distributionReference(index: number): string {
   return `ACH·${2400 + index * 7}`;
 }
 
 /**
- * Generate a schedule from an explicit management-entered first distribution
- * date through a maturity date: the first payment lands on `start` exactly, and
- * each subsequent payment falls 30 days after the previous one, up to and
- * including `maturity`. Returns [] if either date is missing or `maturity`
- * precedes `start`.
+ * Generate a schedule from the first distribution date through maturity: the
+ * first payment lands on `start` exactly, each subsequent payment falls 30 days
+ * after the previous one, up to and including `maturity`. The FINAL distribution
+ * also returns the principal (`principalCents` is added to its amount) — the
+ * note expires after that last, principal-bearing distribution. Returns [] if
+ * either date is missing or `maturity` precedes `start`.
  */
 export function generateScheduleBetween(
   start: Date,
   amountCents: number,
   maturity: Date | null,
+  principalCents = 0,
 ): GeneratedDistribution[] {
   if (!maturity || maturity < start) return [];
   const out: GeneratedDistribution[] = [];
@@ -64,6 +44,9 @@ export function generateScheduleBetween(
     const due = addDays(start, i * DISTRIBUTION_INTERVAL_DAYS);
     if (due > maturity) break;
     out.push({ index: i + 1, dueDate: due, amountCents });
+  }
+  if (out.length > 0 && principalCents > 0) {
+    out[out.length - 1]!.amountCents += principalCents;
   }
   return out;
 }

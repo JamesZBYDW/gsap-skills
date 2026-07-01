@@ -2,8 +2,8 @@ import 'server-only';
 import type { InvestorState } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { formatUSD, formatRate, formatRatePrecise } from '@/lib/money';
-import { formatDate, formatDateLong, formatMonthYear, arrivalLabel } from '@/lib/dates';
-import { deriveStatuses, type DistributionDisplayStatus } from '@/lib/schedule';
+import { formatDate, formatDateLong, formatMonthYear, arrivalLabel, daysBetween } from '@/lib/dates';
+import { deriveStatuses, MATURITY_NOTICE_DAYS, type DistributionDisplayStatus } from '@/lib/schedule';
 import { investorStateTone, distributionTone, distributionStatusLabel, type Tone } from '@/lib/tone';
 import { documentKindLabel } from '@/lib/labels';
 import { firstName, maskedAccount } from '@/lib/display';
@@ -44,7 +44,12 @@ export interface OverviewVM {
   statusLabel: string;
   statusTone: Tone;
   statusSub: string;
-  monthly: string;
+  /**
+   * Maturity notice, replacing the monthly-income tile: 'window' inside the
+   * 90-day pre-expiry window, 'expired' after the final (principal-bearing)
+   * distribution, 'none' otherwise.
+   */
+  notice: { level: 'none' | 'window' | 'expired'; value: string; sub: string };
   next: { amount: string; arrival: string; date: string } | null;
   maturity: {
     percent: number;
@@ -81,7 +86,7 @@ export async function getOverview(investorId: string, now = new Date()): Promise
       rate: note ? formatRatePrecise(note.rateBps) : '—',
       rateSub: note ? `over ${note.termMonths} months` : '',
       statusSub: investor.state === 'AWAITING' ? 'awaiting your wire' : investor.state === 'PENDING' ? 'under review' : '',
-      monthly: note ? formatUSD(note.monthlyAmountCents) : '—',
+      notice: { level: 'none', value: 'None', sub: 'we notify you 90 days before your note expires' },
       next: null,
       maturity: null,
       distributed: { amount: '$0', count: note ? `0 of ${note.termMonths}` : '' },
@@ -102,14 +107,35 @@ export async function getOverview(investorId: string, now = new Date()): Promise
   const remaining = Math.max(0, total - paidCount);
   const fraction = total > 0 ? paidCount / total : 0;
 
+  // Expiry is derived at read time: the note is Expired after its final
+  // (principal-bearing) distribution; inside the 90-day pre-expiry window the
+  // investor sees a maturity notice (management sees it on the team overview).
+  const lastDue = note.distributions[note.distributions.length - 1]!.dueDate;
+  const daysToExpiry = daysBetween(now, lastDue);
+  const expired = daysToExpiry < 0;
+  const notice: OverviewVM['notice'] = expired
+    ? { level: 'expired', value: 'Note expired', sub: `final distribution ${formatDate(lastDue)}` }
+    : daysToExpiry <= MATURITY_NOTICE_DAYS
+      ? {
+          level: 'window',
+          value: daysToExpiry === 0 ? 'Expires today' : `Expires in ${daysToExpiry} day${daysToExpiry === 1 ? '' : 's'}`,
+          sub: `final distribution ${formatDate(lastDue)} — Investor Relations will contact you`,
+        }
+      : { level: 'none', value: 'None', sub: 'we notify you 90 days before your note expires' };
+
   return {
     ...base,
+    ...(expired ? { statusLabel: 'Expired', statusTone: 'mute' as Tone } : null),
     active: true,
     principal: formatUSD(note.principalCents),
     rate: formatRatePrecise(note.rateBps),
     rateSub: `over ${term} months`,
-    statusSub: note.wireDate ? `funded ${formatMonthYear(note.wireDate)}` : '',
-    monthly: formatUSD(note.monthlyAmountCents),
+    statusSub: expired
+      ? `matured ${formatDate(lastDue)}`
+      : note.wireDate
+        ? `funded ${formatMonthYear(note.wireDate)}`
+        : '',
+    notice,
     next: next
       ? { amount: formatUSD(next.amountCents), arrival: arrivalLabel(next.dueDate, now), date: formatDate(next.dueDate) }
       : null,

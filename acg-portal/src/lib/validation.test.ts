@@ -20,9 +20,9 @@ describe('createAccountSchema', () => {
     expect(r.success).toBe(true);
     if (r.success) {
       expect(r.data.type).toBe('INDIVIDUAL');
-      expect(r.data.status).toBe('AWAITING');
       expect(r.data.mustChange).toBe(true);
       expect(r.data.termMonths).toBe(24);
+      expect(r.data.wireReceivedDate).toBeNull();
     }
   });
   it('rejects an unsupported term', () => {
@@ -59,7 +59,7 @@ describe('principal validation/transform (create account)', () => {
 });
 
 describe('noteTermsSchema', () => {
-  const base = { ratePercent: '18', status: 'ACTIVE', termMonths: '24', wireReceivedDate: '2026-06-01', firstDistributionDate: '2026-07-01' };
+  const base = { ratePercent: '18', termMonths: '24', wireReceivedDate: '2026-06-01' };
   it('transforms principal to cents; keeps ratePercent numeric; coerces the term', () => {
     const r = noteTermsSchema.safeParse({ ...base, principal: '250,000' });
     expect(r.success).toBe(true);
@@ -67,6 +67,7 @@ describe('noteTermsSchema', () => {
       expect(r.data.principal).toBe(25_000_000);
       expect(r.data.ratePercent).toBe(18);
       expect(r.data.termMonths).toBe(24);
+      expect(r.data.wireReceivedDate).toBe('2026-06-01');
     }
   });
   it('accepts each published term (1 / 1.5 / 2 / 3 years) and rejects others', () => {
@@ -75,12 +76,11 @@ describe('noteTermsSchema', () => {
     }
     expect(noteTermsSchema.safeParse({ ...base, termMonths: '30', principal: '250,000' }).success).toBe(false);
   });
-  it('leaves dates optional (blank → null) for an Awaiting shell', () => {
-    const r = noteTermsSchema.safeParse({ ratePercent: '0', status: 'AWAITING', termMonths: '12', principal: '' });
+  it('leaves the wire date optional (blank → null) for an Awaiting shell', () => {
+    const r = noteTermsSchema.safeParse({ ratePercent: '0', termMonths: '12', principal: '' });
     expect(r.success).toBe(true);
     if (r.success) {
       expect(r.data.wireReceivedDate).toBeNull();
-      expect(r.data.firstDistributionDate).toBeNull();
     }
   });
 });

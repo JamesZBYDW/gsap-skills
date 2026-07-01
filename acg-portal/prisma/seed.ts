@@ -3,8 +3,8 @@ import { PrismaClient, type InvestorType, type InvestorState } from '@prisma/cli
 import { hash } from '@node-rs/argon2';
 import { deriveRateBps } from '../src/lib/rates';
 import { monthlyDistributionCents } from '../src/lib/money';
-import { generateSchedule, computeMaturity, distributionReference } from '../src/lib/schedule';
-import { utcDate } from '../src/lib/dates';
+import { generateScheduleBetween, computeMaturity, distributionReference } from '../src/lib/schedule';
+import { utcDate, addDays } from '../src/lib/dates';
 
 const prisma = new PrismaClient();
 
@@ -27,7 +27,6 @@ interface SeedInvestor {
   principalCents?: number;
   termMonths?: number;
   wireDate?: Date | null;
-  distributionDay?: number;
   accreditedAt?: Date | null;
   login?: { password: string }; // create an investor User login
   banking?: { bankName: string; last4: string; method: string };
@@ -178,15 +177,14 @@ async function seedInvestors() {
       await prisma.notifPref.create({ data: { investorId: investor.id, ...s.notif } });
     }
 
-    // Note + schedule.
+    // Note + schedule — everything derives from the wire-received date: the
+    // first distribution 30 days after the wire, then every 30 days through
+    // maturity (wire + term); the final distribution also returns the principal.
     if (hasTerms) {
       const isActive = s.state === 'ACTIVE' && s.wireDate;
       const wireDate = s.wireDate ?? null;
-      const distributionDay = s.distributionDay ?? 1;
       const maturityDate = wireDate ? computeMaturity(wireDate, s.termMonths!) : null;
-      const firstDist = wireDate
-        ? generateSchedule(wireDate, s.termMonths!, distributionDay, monthly)[0]?.dueDate ?? null
-        : null;
+      const firstDist = wireDate ? addDays(wireDate, 30) : null;
 
       const note = await prisma.note.create({
         data: {
@@ -198,13 +196,13 @@ async function seedInvestors() {
           wireDate,
           firstDistributionDate: firstDist,
           maturityDate,
-          distributionDay,
+          distributionDay: firstDist ? firstDist.getUTCDate() : 1,
           status: isActive ? 'ACTIVE' : 'AWAITING',
         },
       });
 
-      if (isActive && wireDate) {
-        const schedule = generateSchedule(wireDate, s.termMonths!, distributionDay, monthly);
+      if (isActive && firstDist) {
+        const schedule = generateScheduleBetween(firstDist, monthly, maturityDate, s.principalCents!);
         for (const d of schedule) {
           const paid = d.dueDate <= AS_OF;
           await prisma.distribution.create({

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeDistributionDollars, addMonthsISO, formatISOToLong } from './noteterms';
+import { computeDistributionDollars, addMonthsISO, addDaysISO, formatISOToLong } from './noteterms';
 
 describe('computeDistributionDollars', () => {
   it('is principal × rate ÷ 12 (matches $250k @ 18% → 3,750)', () => {
@@ -27,6 +27,17 @@ describe('addMonthsISO', () => {
   it('returns empty for blank/invalid input', () => {
     expect(addMonthsISO('', 24)).toBe('');
     expect(addMonthsISO('not-a-date', 24)).toBe('');
+  });
+});
+
+describe('addDaysISO', () => {
+  it('derives the first distribution as wire + 30 days', () => {
+    expect(addDaysISO('2026-08-01', 30)).toBe('2026-08-31');
+    expect(addDaysISO('2026-09-01', 30)).toBe('2026-10-01');
+    expect(addDaysISO('2025-12-20', 30)).toBe('2026-01-19');
+  });
+  it('returns empty for blank/invalid input', () => {
+    expect(addDaysISO('', 30)).toBe('');
   });
 });
 

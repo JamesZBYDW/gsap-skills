@@ -81,19 +81,6 @@ export function daysBetween(a: Date, b: Date): number {
   return Math.round((startOfUTCDay(b).getTime() - startOfUTCDay(a).getTime()) / MS_PER_DAY);
 }
 
-/**
- * The first distribution date: the `distributionDay` of the month AFTER the
- * wire month. Wire Apr 14 (day=1) -> May 1.
- */
-export function firstDistributionAfter(wireDate: Date, distributionDay: number): Date {
-  const y = wireDate.getUTCFullYear();
-  const m = wireDate.getUTCMonth();
-  const first = new Date(Date.UTC(y, m + 1, 1));
-  const lastDay = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
-  first.setUTCDate(Math.min(distributionDay, lastDay));
-  return first;
-}
-
 /** "Arrives today" / "Arrives tomorrow" / "Arrives in 6 days" (future only). */
 export function arrivalLabel(due: Date, now: Date): string {
   const d = daysBetween(now, due);

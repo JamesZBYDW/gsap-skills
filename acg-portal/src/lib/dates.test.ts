@@ -4,8 +4,8 @@ import {
   formatDate,
   formatMonthYear,
   addMonths,
+  addDays,
   daysBetween,
-  firstDistributionAfter,
   arrivalLabel,
   inDaysLabel,
   wholeMonthsUntil,
@@ -26,10 +26,10 @@ describe('addMonths', () => {
   });
 });
 
-describe('firstDistributionAfter', () => {
-  it('returns day-1 of the following month', () => {
-    expect(formatDate(firstDistributionAfter(utcDate(2025, 3, 14), 1))).toBe('May 1, 2025');
-    expect(formatDate(firstDistributionAfter(utcDate(2025, 11, 20), 1))).toBe('Jan 1, 2026');
+describe('addDays', () => {
+  it('adds whole days across month/year boundaries (first distribution = wire + 30)', () => {
+    expect(formatDate(addDays(utcDate(2025, 3, 14), 30))).toBe('May 14, 2025');
+    expect(formatDate(addDays(utcDate(2025, 11, 20), 30))).toBe('Jan 19, 2026');
   });
 });
 
