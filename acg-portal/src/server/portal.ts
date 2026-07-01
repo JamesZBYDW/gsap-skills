@@ -197,27 +197,6 @@ export async function getSchedule(investorId: string, now = new Date()): Promise
   };
 }
 
-// ─── D. Messages ────────────────────────────────────────────────────────────
-
-export interface MessageVM {
-  id: string;
-  author: 'INVESTOR' | 'TEAM';
-  authorName: string;
-  text: string;
-  time: string;
-}
-
-export async function getInvestorMessages(investorId: string): Promise<MessageVM[]> {
-  const msgs = await prisma.message.findMany({ where: { investorId }, orderBy: { sentAt: 'asc' } });
-  return msgs.map((m) => ({
-    id: m.id,
-    author: m.author,
-    authorName: m.authorName,
-    text: m.text,
-    time: formatDate(m.sentAt),
-  }));
-}
-
 // ─── E. Documents ───────────────────────────────────────────────────────────
 
 export interface DocumentVM {
@@ -247,7 +226,7 @@ export interface ProfileVM {
   accreditation: { acknowledged: boolean; confirmedDate: string | null };
   banking: { display: string; method: string } | null;
   w9OnFile: boolean;
-  notif: { distributionPosted: boolean; maturityReminder: boolean; newMessage: boolean };
+  notif: { distributionPosted: boolean; maturityReminder: boolean };
 }
 
 export async function getProfile(investorId: string): Promise<ProfileVM> {
@@ -271,7 +250,6 @@ export async function getProfile(investorId: string): Promise<ProfileVM> {
     notif: {
       distributionPosted: investor.notifPref?.distributionPosted ?? true,
       maturityReminder: investor.notifPref?.maturityReminder ?? true,
-      newMessage: investor.notifPref?.newMessage ?? false,
     },
   };
 }

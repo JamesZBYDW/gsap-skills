@@ -33,23 +33,28 @@ a Postgres database, server-side authorization, and an audit trail.
 |---|---|
 | Overview (note dashboard) | Portfolio overview |
 | Schedule & ledger | Investors roster + detail |
-| Messages (IR concierge chat) | Registrations queue (approve/decline) |
-| Documents (access-controlled) | Messages (per-investor chat + broadcast) |
+| Documents (access-controlled) | **Create account** (details + terms + login) |
 | Profile (banking, accreditation, notifications, change password) | Investor detail: **set note terms** + **provision login** |
 
 Access is gated by real permissions (no client-side role trust). Investors see
-only their own note, messages, and documents, and chat only with management.
-Management chats with any investor, provisions each investor's login, and sets
-their note terms. Team members are scoped by role. A TEAM admin can open an
-investor's portal **read-only** (audited impersonation) for support — all
-mutations are blocked while impersonating.
+only their own note, schedule, and documents. Management creates each investor's
+account, provisions their login, and sets their note terms. Team members are
+scoped by role. A TEAM admin can open an investor's portal **read-only** (audited
+impersonation) for support — all mutations are blocked while impersonating.
 
-### Logins & note terms (management-driven)
+There is no self-registration and no in-app messaging: management stands up every
+account, and out-of-band contact (email/phone) is used for anything conversational.
 
-- **Investor logins are provisioned by management.** From an investor's detail
-  panel, management sets the login email + an initial password (or generates
-  one); the investor can change it later in Profile. Credentials are hashed and
-  persisted for future sign-in.
+### Accounts, logins & note terms (management-driven)
+
+- **Management creates the whole account** from the **Create account** tab in one
+  step: investor details, note terms, and the sign-in credentials the investor
+  will use.
+- **Investor logins are provisioned by management** (from Create account, or later
+  from an investor's detail panel): a login email + an initial password (or a
+  generated one), hashed and persisted for real sign-in. On their **first sign-in**
+  the investor is **forced to set their own password** before they can enter the
+  portal; they can change it again anytime in Profile.
 - **Management sets the note terms** — principal, fixed rate, status, first
   distribution date, recurring day-of-month, distribution amount, and maturity.
   Saving regenerates the distribution schedule, which the investor sees on their
@@ -111,10 +116,11 @@ Change these before any non-demo deployment.
 ```
 src/
   app/
-    login/                     auth gate (sign in + request access)
+    login/                     auth gate (sign in only — no self-registration)
+    change-password/           forced first-login password set
     portal/                    investor side (layout guard + views)
-    console/                   team side (layout guard + views)
-    api/                       REST endpoints (auth, messages, profile, team/*)
+    console/                   team side (layout guard + views, incl. Create account)
+    api/                       REST endpoints (auth, profile, team/*)
   components/
     shell/                     Sidebar, TopBar, AppShell
     portal/  team/             view components (1:1 with the prototype)
@@ -135,16 +141,16 @@ prisma/                       schema + migrations + seed
 
 ## Key flows (end-to-end, through real APIs)
 
-1. **Request access → Registrations queue → Approve → Investor (Awaiting).**
-2. **Management provisions the investor's login** (email + initial password) →
-   the investor signs in against real database credentials → changes their
-   password in Profile.
-3. **Management sets the note terms** (principal, rate, status, first
-   distribution date, recurring day, amount, maturity) → the distribution
-   **schedule regenerates** → the investor sees it on Overview + Schedule.
-4. **Chat:** management messages any investor; each investor chats only with
-   management; unread indicators both sides + a team **broadcast** to all active
-   investors.
+1. **Create account (one step):** from the **Create account** tab, management
+   enters the investor's details, note terms, and login credentials → the
+   investor record, note, generated schedule, and hashed login are all created.
+2. **Forced first sign-in:** the investor signs in with the management-issued
+   credentials against real database records → is **forced to set their own
+   password** before entering the portal → can change it again later in Profile.
+3. **Management sets/updates the note terms** (principal, rate, status, first
+   distribution date, recurring day, amount, maturity) — at creation or later
+   from the investor's detail panel → the distribution **schedule regenerates**
+   → the investor sees it on Overview + Schedule.
 
 ## Compliance & security
 

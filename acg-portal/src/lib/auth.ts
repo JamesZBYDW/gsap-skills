@@ -110,7 +110,14 @@ export async function attemptLogin(params: {
 
   return {
     ok: true,
-    user: { id: user.id, role: user.role, name: user.name, email: user.email, investorId: investor?.id ?? null },
+    user: {
+      id: user.id,
+      role: user.role,
+      name: user.name,
+      email: user.email,
+      investorId: investor?.id ?? null,
+      mustChangePassword: user.mustChangePassword,
+    },
   };
 }
 

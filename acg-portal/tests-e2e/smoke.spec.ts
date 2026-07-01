@@ -28,26 +28,28 @@ test('investor sees their note overview with exact figures', async ({ page }) =>
   await expect(page.getByText('April 14, 2027')).toBeVisible();
 });
 
-test('requests and messages nav reflect the trimmed scope', async ({ page }) => {
+test('investor nav is trimmed — no Requests, no Messages', async ({ page }) => {
   await signIn(page, 'Investor', INVESTOR_EMAIL, INVESTOR_PASSWORD);
   await page.waitForURL('**/portal/overview');
-  // Requests removed; Messages kept.
   await expect(page.getByRole('link', { name: 'Requests' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Messages' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Messages' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Schedule' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Documents' })).toBeVisible();
 });
 
-test('team overview shows registrations + investor replies (no requests card)', async ({ page }) => {
+test('team nav/overview reflect no registrations or messages; Create account is present', async ({ page }) => {
   await signIn(page, 'Investor Relations', TEAM_EMAIL, TEAM_PASSWORD);
   await page.waitForURL('**/console/overview');
   await expect(page.getByText('Portfolio overview')).toBeVisible();
-  await expect(page.getByText('Pending registrations')).toBeVisible();
-  await expect(page.getByText('Open requests')).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Requests' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Registrations' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Messages' })).toHaveCount(0);
+  await expect(page.getByText('Pending registrations')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Create account', exact: true })).toBeVisible();
 });
 
-// The signature closed loop: management provisions a login + sets note terms,
-// then the investor signs in with those credentials and sees the schedule.
-test('management provisions login + note terms; investor signs in and sees schedule', async ({ page }) => {
+// Signature loop A: management edits an existing investor's note terms + login
+// from the detail panel; that investor then signs in and sees the schedule.
+test('management sets terms + login on an existing investor; they sign in and see the schedule', async ({ page }) => {
   const email = 'crest.login@acg.example';
   const password = 'Harbor2026xyz';
 
@@ -57,7 +59,6 @@ test('management provisions login + note terms; investor signs in and sees sched
   await page.waitForURL('**/console/investors');
   await page.getByText('Crest Harbor Holdings').first().click();
 
-  // Set note terms -> Active with an explicit schedule.
   await page.getByTestId('mn-principal').fill('750,000');
   await page.getByTestId('mn-rate').fill('15');
   await page.getByTestId('mn-amount').fill('9,375');
@@ -68,7 +69,7 @@ test('management provisions login + note terms; investor signs in and sees sched
   await page.getByTestId('mn-save').click();
   await expect(page.getByText('Note terms saved — schedule updated')).toBeVisible();
 
-  // Provision a login the investor can use.
+  // Provision a login the investor can use — leave them not forced to change it.
   await page.getByText('Crest Harbor Holdings').first().click();
   await page.getByTestId('cred-email').fill(email);
   await page.getByTestId('cred-password').fill(password);
@@ -78,16 +79,70 @@ test('management provisions login + note terms; investor signs in and sees sched
 
   // Close the slide-over (its overlay covers the top bar), then sign out.
   await page.keyboard.press('Escape');
-  // Sign out (team) and sign in as the newly provisioned investor.
   await page.getByRole('button', { name: 'Sign out' }).click();
   await page.waitForURL('**/login');
   await signIn(page, 'Investor', email, password);
   await page.waitForURL('**/portal/overview');
   await expect(page.getByText('$750,000')).toBeVisible();
 
-  // The schedule reflects the management-entered terms.
   await page.getByRole('link', { name: 'Schedule' }).click();
   await page.waitForURL('**/portal/schedule');
   await expect(page.getByText('Aug 1, 2026').first()).toBeVisible();
   await expect(page.getByText('$9,375').first()).toBeVisible();
+});
+
+// Signature loop B: management creates a whole account in one step (details +
+// note terms + login) and requires a first-login password change. The investor
+// signs in with the issued password, is forced to set a new one, then lands on
+// their overview with the schedule generated from the entered terms.
+test('management creates an account; investor is forced to set a password, then sees the schedule', async ({ page }) => {
+  const contact = 'northwind@acg.example';
+  const issued = 'Northwind2026x';
+  const chosen = 'Aurora2026zzz';
+
+  await signIn(page, 'Investor Relations', TEAM_EMAIL, TEAM_PASSWORD);
+  await page.waitForURL('**/console/overview');
+  await page.getByRole('link', { name: 'Create account', exact: true }).click();
+  await page.waitForURL('**/console/create');
+
+  await page.getByTestId('ca-name').fill('Northwind Partners');
+  await page.getByTestId('ca-email').fill(contact);
+  await page.getByTestId('ca-type-entity').click();
+  await page.getByTestId('ca-principal').fill('600,000');
+  await page.getByTestId('ca-rate').fill('15');
+  await page.getByTestId('ca-amount').fill('7,500');
+  await page.getByTestId('ca-day').fill('1');
+  await page.getByTestId('ca-first').fill('2026-09-01');
+  await page.getByTestId('ca-maturity').fill('2028-03-01');
+  await page.getByTestId('ca-status').selectOption('ACTIVE');
+  // Login email defaults to the contact email; keep "require change" checked.
+  await page.getByTestId('ca-password').fill(issued);
+  await page.getByTestId('ca-submit').click();
+  await page.waitForURL('**/console/investors');
+  await expect(page.getByText('Northwind Partners', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.waitForURL('**/login');
+
+  // Investor signs in with the issued password and is forced to set a new one.
+  await signIn(page, 'Investor', contact, issued);
+  await page.waitForURL('**/change-password');
+  await expect(page.getByText('Set your password')).toBeVisible();
+  await page.getByTestId('fp-new').fill(chosen);
+  await page.getByTestId('fp-confirm').fill(chosen);
+  await page.getByTestId('fp-submit').click();
+  await page.waitForURL('**/portal/overview');
+  await expect(page.getByText('$600,000')).toBeVisible();
+
+  await page.getByRole('link', { name: 'Schedule' }).click();
+  await page.waitForURL('**/portal/schedule');
+  await expect(page.getByText('Sep 1, 2026').first()).toBeVisible();
+  await expect(page.getByText('$7,500').first()).toBeVisible();
+
+  // The new password sticks: sign out and back in with it, no forced screen.
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.waitForURL('**/login');
+  await signIn(page, 'Investor', contact, chosen);
+  await page.waitForURL('**/portal/overview');
+  await expect(page.getByText('$600,000')).toBeVisible();
 });

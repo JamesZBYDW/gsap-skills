@@ -21,12 +21,12 @@ export function OverviewView({ vm }: { vm: OverviewVM }) {
         <div className="card" style={{ padding: '30px 32px', maxWidth: 640 }}>
           <div className="tileEyebrow">YOUR NOTE</div>
           <div style={{ fontSize: '1.3rem', fontWeight: 800, marginTop: 10 }}>
-            {vm.state === 'PENDING' ? 'Your registration is under review' : 'Your note is being set up'}
+            Your note is being set up
           </div>
           <p style={{ fontSize: '.9rem', color: 'var(--text-2)', marginTop: 10, lineHeight: 1.6 }}>
-            {vm.state === 'PENDING'
-              ? 'Our Investor Relations team is reviewing your request. We will email you once your account is approved.'
-              : 'Your account is approved. Your note activates once we record your wire — we will share wire instructions by secure email and confirm by phone.'}
+            Investor Relations is finalizing your note terms. Once your note is
+            activated, your distribution schedule will appear here — we will confirm
+            wire details with you by phone.
           </p>
           <div style={{ display: 'flex', gap: 24, marginTop: 22, flexWrap: 'wrap' }}>
             <div>
@@ -118,9 +118,6 @@ export function OverviewView({ vm }: { vm: OverviewVM }) {
           </button>
           <button className="quickAction" onClick={() => router.push('/portal/documents')}>
             <Icon name="file" size={16} color="var(--acc)" />Documents
-          </button>
-          <button className="quickAction" onClick={() => router.push('/portal/messages')}>
-            <Icon name="message" size={16} color="var(--acc)" />Message IR
           </button>
           <button className="quickAction" onClick={() => router.push('/portal/profile')}>
             <Icon name="user" size={16} color="var(--acc)" />Account &amp; profile

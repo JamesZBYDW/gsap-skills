@@ -65,6 +65,7 @@ export interface SessionUser {
   name: string;
   email: string;
   investorId: string | null;
+  mustChangePassword: boolean;
 }
 
 /** Resolve the current authenticated user from the session cookie, or null. */
@@ -92,6 +93,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     name: u.name,
     email: u.email,
     investorId: u.investor?.id ?? null,
+    mustChangePassword: u.mustChangePassword,
   };
 }
 

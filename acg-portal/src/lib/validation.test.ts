@@ -1,60 +1,56 @@
 import { describe, it, expect } from 'vitest';
 import {
-  registerSchema,
-  addInvestorSchema,
+  createAccountSchema,
   noteTermsSchema,
   credentialsSchema,
   passwordChangeSchema,
+  firstPasswordSchema,
 } from './validation';
 
-const baseReg = {
-  name: 'Sofia Marenco',
-  email: 'sofia@example.com',
-  type: 'INDIVIDUAL' as const,
-  acknowledgedAccredited: true as const,
+const baseCreate = {
+  name: 'Acme LLC',
+  email: 'ops@acme.com',
+  password: 'Sunrise2026x',
+  ratePercent: '18',
 };
 
-describe('registerSchema — term enforcement', () => {
-  it('accepts the four published terms and rejects others', () => {
-    for (const t of [12, 18, 24, 36]) {
-      expect(registerSchema.safeParse({ ...baseReg, principal: '250,000', termMonths: t }).success).toBe(true);
+describe('createAccountSchema', () => {
+  it('accepts the minimum fields and applies defaults', () => {
+    const r = createAccountSchema.safeParse(baseCreate);
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.type).toBe('INDIVIDUAL');
+      expect(r.data.status).toBe('AWAITING');
+      expect(r.data.mustChange).toBe(true);
+      expect(r.data.distributionDay).toBe(1);
     }
-    for (const t of [13, 60, 120, 1]) {
-      expect(registerSchema.safeParse({ ...baseReg, principal: '250,000', termMonths: t }).success).toBe(false);
-    }
+  });
+  it('requires a valid contact email and a strong password', () => {
+    expect(createAccountSchema.safeParse({ ...baseCreate, email: 'nope' }).success).toBe(false);
+    expect(createAccountSchema.safeParse({ ...baseCreate, password: 'short1' }).success).toBe(false);
+    expect(createAccountSchema.safeParse({ ...baseCreate, password: 'alllettersonly' }).success).toBe(false);
   });
 });
 
-describe('principal validation/transform', () => {
+describe('principal validation/transform (create account)', () => {
   it('transforms a valid principal to cents', () => {
-    const r = registerSchema.safeParse({ ...baseReg, principal: '250,000', termMonths: 24 });
+    const r = createAccountSchema.safeParse({ ...baseCreate, principal: '250,000' });
     expect(r.success && r.data.principal).toBe(25_000_000);
   });
   it('treats blank as null (allowed)', () => {
-    const r = registerSchema.safeParse({ ...baseReg, principal: '', termMonths: 24 });
+    const r = createAccountSchema.safeParse({ ...baseCreate, principal: '' });
     expect(r.success && r.data.principal).toBeNull();
   });
   it('rejects below the $100,000 minimum', () => {
-    expect(registerSchema.safeParse({ ...baseReg, principal: '1', termMonths: 24 }).success).toBe(false);
-    expect(registerSchema.safeParse({ ...baseReg, principal: '99,999', termMonths: 24 }).success).toBe(false);
+    expect(createAccountSchema.safeParse({ ...baseCreate, principal: '1' }).success).toBe(false);
+    expect(createAccountSchema.safeParse({ ...baseCreate, principal: '99,999' }).success).toBe(false);
   });
   it('rejects unparseable amounts instead of silently becoming $0', () => {
-    expect(registerSchema.safeParse({ ...baseReg, principal: 'two hundred thousand', termMonths: 24 }).success).toBe(false);
-    expect(registerSchema.safeParse({ ...baseReg, principal: '-50000', termMonths: 24 }).success).toBe(false);
+    expect(createAccountSchema.safeParse({ ...baseCreate, principal: 'two hundred thousand' }).success).toBe(false);
+    expect(createAccountSchema.safeParse({ ...baseCreate, principal: '-50000' }).success).toBe(false);
   });
   it('rejects amounts above the supported maximum (Int-overflow guard)', () => {
-    expect(registerSchema.safeParse({ ...baseReg, principal: '25,000,000', termMonths: 24 }).success).toBe(false);
-  });
-});
-
-describe('addInvestorSchema (shell only)', () => {
-  it('requires name + email; defaults type', () => {
-    const r = addInvestorSchema.safeParse({ name: 'Acme LLC', email: 'ops@acme.com' });
-    expect(r.success && r.data.type).toBe('INDIVIDUAL');
-  });
-  it('rejects a missing/invalid email', () => {
-    expect(addInvestorSchema.safeParse({ name: 'Acme LLC' }).success).toBe(false);
-    expect(addInvestorSchema.safeParse({ name: 'Acme LLC', email: 'nope' }).success).toBe(false);
+    expect(createAccountSchema.safeParse({ ...baseCreate, principal: '25,000,000' }).success).toBe(false);
   });
 });
 
@@ -86,5 +82,9 @@ describe('credentials + password policy', () => {
   it('password change requires current + strong new', () => {
     expect(passwordChangeSchema.safeParse({ currentPassword: 'x', newPassword: 'Sunrise2026x' }).success).toBe(true);
     expect(passwordChangeSchema.safeParse({ currentPassword: '', newPassword: 'Sunrise2026x' }).success).toBe(false);
+  });
+  it('forced first-login set requires only a strong new password', () => {
+    expect(firstPasswordSchema.safeParse({ newPassword: 'Sunrise2026x' }).success).toBe(true);
+    expect(firstPasswordSchema.safeParse({ newPassword: 'weak' }).success).toBe(false);
   });
 });

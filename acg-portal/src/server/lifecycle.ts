@@ -1,81 +1,11 @@
 import 'server-only';
 import { prisma } from '@/lib/db';
-import { deriveRateBps } from '@/lib/rates';
-import { monthlyDistributionCents } from '@/lib/money';
 import { generateScheduleBetween } from '@/lib/schedule';
 import { parseISODate } from '@/lib/dates';
 import { hashPassword, verifyPassword } from '@/lib/password';
 import { audit } from '@/lib/audit';
 import { HttpError } from '@/lib/http';
-import type { NoteTermsInput } from '@/lib/validation';
-
-// ─── Registrations → investors ──────────────────────────────────────────────
-
-/** Approve a pending registration: create an Awaiting investor + note terms. */
-export async function approveRegistration(registrationId: string, actorUserId: string, ip: string | null) {
-  const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
-  if (!reg || reg.status !== 'PENDING') throw new HttpError(404, 'Registration not found.');
-
-  const rateBps = deriveRateBps(reg.termMonths);
-  const principalCents = reg.intendedPrincipalCents ?? 0;
-
-  const investor = await prisma.$transaction(async (tx) => {
-    const inv = await tx.investor.create({
-      data: {
-        legalName: reg.name,
-        type: reg.type,
-        email: reg.email,
-        state: 'AWAITING',
-        accreditationAcknowledged: reg.acknowledgedAccredited,
-        accreditationConfirmedAt: reg.acknowledgedAccredited ? new Date() : null,
-      },
-    });
-    await tx.note.create({
-      data: {
-        investorId: inv.id,
-        principalCents,
-        rateBps,
-        termMonths: reg.termMonths,
-        monthlyAmountCents: monthlyDistributionCents(principalCents, rateBps),
-        status: 'AWAITING',
-      },
-    });
-    await tx.registration.update({
-      where: { id: registrationId },
-      data: { status: 'APPROVED', reviewedAt: new Date(), reviewedByUserId: actorUserId },
-    });
-    return inv;
-  });
-
-  await audit({ action: 'REGISTRATION_APPROVE', actorUserId, targetType: 'Investor', targetId: investor.id, metadata: { registrationId }, ip });
-  await audit({ action: 'INVESTOR_CREATE', actorUserId, targetType: 'Investor', targetId: investor.id, ip });
-  return investor;
-}
-
-/** Decline a registration and record a Declined investor in the roster. */
-export async function declineRegistration(registrationId: string, actorUserId: string, ip: string | null) {
-  const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
-  if (!reg || reg.status !== 'PENDING') throw new HttpError(404, 'Registration not found.');
-
-  await prisma.$transaction(async (tx) => {
-    await tx.investor.create({
-      data: { legalName: reg.name, type: reg.type, email: reg.email, state: 'DECLINED' },
-    });
-    await tx.registration.update({
-      where: { id: registrationId },
-      data: { status: 'DECLINED', reviewedAt: new Date(), reviewedByUserId: actorUserId },
-    });
-  });
-
-  await audit({ action: 'REGISTRATION_DECLINE', actorUserId, targetType: 'Registration', targetId: registrationId, ip });
-}
-
-export async function requestMoreInfo(registrationId: string, actorUserId: string, ip: string | null) {
-  const reg = await prisma.registration.findUnique({ where: { id: registrationId } });
-  if (!reg || reg.status !== 'PENDING') throw new HttpError(404, 'Registration not found.');
-  await prisma.registration.update({ where: { id: registrationId }, data: { infoRequested: true } });
-  await audit({ action: 'REGISTRATION_INFO_REQUEST', actorUserId, targetType: 'Registration', targetId: registrationId, ip });
-}
+import type { NoteTermsInput, CreateAccountInput } from '@/lib/validation';
 
 // ─── Investor creation ────────────────────────────────────────────────────
 
@@ -89,6 +19,46 @@ export async function addInvestor(
     data: { legalName: input.name, type: input.type, email: input.email, state: 'AWAITING' },
   });
   await audit({ action: 'INVESTOR_CREATE', actorUserId, targetType: 'Investor', targetId: investor.id, ip });
+  return investor;
+}
+
+/**
+ * Create an entire investor account in one step: the investor record, its note
+ * terms (and generated schedule when Active), and the sign-in credentials the
+ * investor will use. The login-email clash is checked up front so a taken email
+ * fails before any record is written.
+ */
+export async function createInvestorAccount(
+  input: CreateAccountInput,
+  actorUserId: string,
+  ip: string | null,
+) {
+  const loginEmail = (input.loginEmail ?? input.email).toLowerCase();
+  if (!loginEmail.includes('@')) throw new HttpError(400, 'A valid login email is required.');
+  const clash = await prisma.user.findUnique({ where: { email: loginEmail } });
+  if (clash) throw new HttpError(409, 'That login email is already in use.');
+
+  const investor = await addInvestor({ name: input.name, email: input.email, type: input.type }, actorUserId, ip);
+  await setNoteTerms(
+    investor.id,
+    {
+      principal: input.principal,
+      ratePercent: input.ratePercent,
+      status: input.status,
+      firstDistributionDate: input.firstDistributionDate,
+      distributionDay: input.distributionDay,
+      distributionAmount: input.distributionAmount,
+      maturityDate: input.maturityDate,
+    },
+    actorUserId,
+    ip,
+  );
+  await provisionCredentials(
+    investor.id,
+    { email: loginEmail, password: input.password, mustChange: input.mustChange },
+    actorUserId,
+    ip,
+  );
   return investor;
 }
 
@@ -194,7 +164,7 @@ export async function provisionCredentials(
   await audit({ action: 'CREDENTIALS_SET', actorUserId, targetType: 'Investor', targetId: investorId, metadata: { email: loginEmail }, ip });
 }
 
-/** Investor changes their own password. */
+/** Investor changes their own password (from Profile; requires the current one). */
 export async function changeOwnPassword(userId: string, currentPassword: string, newPassword: string, ip: string | null) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new HttpError(401, 'Not authenticated.');
@@ -207,39 +177,18 @@ export async function changeOwnPassword(userId: string, currentPassword: string,
   await audit({ action: 'PASSWORD_CHANGE', actorUserId: userId, targetType: 'User', targetId: userId, ip });
 }
 
-// ─── Messaging ─────────────────────────────────────────────────────────────
-
-export async function sendTeamMessage(investorId: string, text: string, authorName: string, actorUserId: string, ip: string | null) {
-  const investor = await prisma.investor.findUnique({ where: { id: investorId }, select: { id: true } });
-  if (!investor) throw new HttpError(404, 'Investor not found.');
-  const msg = await prisma.message.create({
-    data: { investorId, author: 'TEAM', authorName, text, readByTeam: true, readByInvestor: false },
+/**
+ * Forced first-login password set. The authenticated session proves identity,
+ * so no current password is required — but this only works while the account is
+ * still flagged mustChangePassword (i.e. still on its management-issued password).
+ */
+export async function setInitialPassword(userId: string, newPassword: string, ip: string | null) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new HttpError(401, 'Not authenticated.');
+  if (!user.mustChangePassword) throw new HttpError(400, 'Password has already been set.');
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: await hashPassword(newPassword), mustChangePassword: false },
   });
-  await audit({ action: 'MESSAGE_SEND', actorUserId, targetType: 'Message', targetId: msg.id, ip });
-  return msg;
-}
-
-export async function markThreadReadByTeam(investorId: string) {
-  await prisma.message.updateMany({
-    where: { investorId, author: 'INVESTOR', readByTeam: false },
-    data: { readByTeam: true },
-  });
-}
-
-export async function broadcast(text: string, authorName: string, actorUserId: string, ip: string | null) {
-  const active = await prisma.investor.findMany({ where: { state: 'ACTIVE' }, select: { id: true } });
-  if (active.length > 0) {
-    await prisma.message.createMany({
-      data: active.map((i) => ({
-        investorId: i.id,
-        author: 'TEAM' as const,
-        authorName,
-        text,
-        readByTeam: true,
-        readByInvestor: false,
-      })),
-    });
-  }
-  await audit({ action: 'BROADCAST_SEND', actorUserId, metadata: { recipients: active.length }, ip });
-  return active.length;
+  await audit({ action: 'PASSWORD_CHANGE', actorUserId: userId, targetType: 'User', targetId: userId, metadata: { initial: true }, ip });
 }

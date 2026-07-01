@@ -20,14 +20,9 @@ export async function getInvestorShell(
     select: { legalName: true },
   });
 
-  const unread = await prisma.message.count({
-    where: { investorId, author: 'TEAM', readByInvestor: false },
-  });
-
   const nav: NavItemData[] = [
     { href: '/portal/overview', label: 'Overview', icon: 'grid' },
     { href: '/portal/schedule', label: 'Schedule', icon: 'calendar' },
-    { href: '/portal/messages', label: 'Messages', icon: 'message', badge: { count: unread, tone: 'gold' } },
     { href: '/portal/documents', label: 'Documents', icon: 'file' },
     { href: '/portal/profile', label: 'Profile', icon: 'user' },
   ];
@@ -46,7 +41,7 @@ export async function getInvestorShell(
         avatarText: initials(investor.legalName),
       };
 
-  return { portalLabel: 'INVESTOR PORTAL', nav, footer, hasUnread: unread > 0 };
+  return { portalLabel: 'INVESTOR PORTAL', nav, footer, hasUnread: false };
 }
 
 export interface TeamShell {
@@ -57,16 +52,10 @@ export interface TeamShell {
 }
 
 export async function getTeamShell(viewerName: string): Promise<TeamShell> {
-  const [pendingRegs, unreadByTeam] = await Promise.all([
-    prisma.registration.count({ where: { status: 'PENDING' } }),
-    prisma.message.count({ where: { author: 'INVESTOR', readByTeam: false } }),
-  ]);
-
   const nav: NavItemData[] = [
     { href: '/console/overview', label: 'Overview', icon: 'grid' },
     { href: '/console/investors', label: 'Investors', icon: 'users' },
-    { href: '/console/registrations', label: 'Registrations', icon: 'user-plus', badge: { count: pendingRegs, tone: 'gold' } },
-    { href: '/console/messages', label: 'Messages', icon: 'message', badge: { count: unreadByTeam, tone: 'acc' } },
+    { href: '/console/create', label: 'Create account', icon: 'user-plus' },
   ];
 
   const footer: SidebarFooter = {
@@ -76,7 +65,7 @@ export async function getTeamShell(viewerName: string): Promise<TeamShell> {
     avatarText: 'IR',
   };
 
-  return { portalLabel: 'TEAM CONSOLE', nav, footer, hasUnread: unreadByTeam > 0 };
+  return { portalLabel: 'TEAM CONSOLE', nav, footer, hasUnread: false };
 }
 
 // ─── Page frame helpers (guard + shell in one call) ─────────────────────────

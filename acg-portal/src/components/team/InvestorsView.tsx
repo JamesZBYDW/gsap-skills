@@ -4,20 +4,18 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { InvestorRowVM } from '@/server/team';
 import { Pill } from '@/components/ui/Pill';
-import { Modal } from '@/components/ui/Modal';
 import { SlideOver } from '@/components/ui/SlideOver';
 import { Icon } from '@/components/Icon';
 import { api, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
 
-const STATES = ['All', 'Active', 'Awaiting', 'Pending'] as const;
+const STATES = ['All', 'Active', 'Awaiting'] as const;
 
 export function InvestorsView({ investors }: { investors: InvestorRowVM[] }) {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<(typeof STATES)[number]>('All');
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -40,8 +38,8 @@ export function InvestorsView({ investors }: { investors: InvestorRowVM[] }) {
             {s}
           </button>
         ))}
-        <button className="chip chip--filled" onClick={() => setAddOpen(true)}>
-          <Icon name="plus" size={14} strokeWidth={2.2} />Add investor
+        <button className="chip chip--filled" onClick={() => router.push('/console/create')}>
+          <Icon name="plus" size={14} strokeWidth={2.2} />Create account
         </button>
       </div>
 
@@ -71,8 +69,6 @@ export function InvestorsView({ investors }: { investors: InvestorRowVM[] }) {
       {selected && (
         <InvestorDetail key={selected.id} investor={selected} onClose={() => setDetailId(null)} onChanged={() => router.refresh()} />
       )}
-
-      {addOpen && <AddInvestorModal onClose={() => setAddOpen(false)} onDone={() => router.refresh()} />}
     </div>
   );
 }
@@ -244,7 +240,6 @@ function InvestorDetail({
       <div className="card" style={{ padding: '18px 20px' }}>
         <div className="tileEyebrow">ACTIONS</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 14 }}>
-          <button className="btnNeutral" onClick={() => router.push('/console/messages')}>Message investor</button>
           <button className="btnNeutral" onClick={impersonate}>View investor portal (read-only)</button>
         </div>
       </div>
@@ -258,62 +253,5 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <div className="fieldLabelGold">{label}</div>
       {children}
     </div>
-  );
-}
-
-// ─── Add-investor modal (shell only; terms set via Manage note) ─────────────
-
-function AddInvestorModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const { toast } = useToast();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [type, setType] = useState<'INDIVIDUAL' | 'ENTITY'>('INDIVIDUAL');
-  const [busy, setBusy] = useState(false);
-
-  async function submit() {
-    setBusy(true);
-    try {
-      await api.post('/api/team/investors', { name, email, type });
-      toast('Investor added — set note terms & login next');
-      onClose();
-      onDone();
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : 'Could not add investor');
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal
-      title="Add investor"
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btnGhost" onClick={onClose}>Cancel</button>
-          <button className="btnPrimary" style={{ padding: '11px 22px', fontSize: '.84rem', borderRadius: 10 }} onClick={submit} disabled={busy || !name.trim() || !email.trim()}>
-            {busy ? 'Adding…' : 'Add investor'}
-          </button>
-        </>
-      }
-    >
-      <div>
-        <div className="fieldLabelGold">Legal name</div>
-        <input className="fieldLight" placeholder="Full legal name or entity" value={name} onChange={(ev) => setName(ev.target.value)} />
-      </div>
-      <div>
-        <div className="fieldLabelGold">Email</div>
-        <input className="fieldLight" placeholder="investor@example.com" value={email} onChange={(ev) => setEmail(ev.target.value)} />
-      </div>
-      <div>
-        <div className="fieldLabelGold">Account type</div>
-        <div className="segment" style={{ borderRadius: 9 }}>
-          <div className={`segmentItem${type === 'INDIVIDUAL' ? ' active' : ''}`} style={{ padding: 9, borderRadius: 8, fontSize: '.8rem', color: type === 'INDIVIDUAL' ? '#0b1d3a' : '#5b6473' }} onClick={() => setType('INDIVIDUAL')}>Individual</div>
-          <div className={`segmentItem${type === 'ENTITY' ? ' active' : ''}`} style={{ padding: 9, borderRadius: 8, fontSize: '.8rem', color: type === 'ENTITY' ? '#0b1d3a' : '#5b6473' }} onClick={() => setType('ENTITY')}>Entity</div>
-        </div>
-      </div>
-      <div style={{ fontSize: '.74rem', color: '#8b93a3' }}>
-        Creates the investor in Awaiting. Set the note terms and provision a login from the investor’s detail panel.
-      </div>
-    </Modal>
   );
 }

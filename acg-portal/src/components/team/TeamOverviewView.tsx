@@ -86,7 +86,7 @@ export function TeamOverviewView({ vm }: { vm: TeamOverviewVM }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Link
             className="card"
-            href="/console/registrations"
+            href="/console/create"
             style={{ padding: '18px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14 }}
           >
             <span
@@ -100,22 +100,20 @@ export function TeamOverviewView({ vm }: { vm: TeamOverviewVM }) {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontWeight: 800,
-                fontSize: '1.05rem',
               }}
             >
-              {vm.regCount}
+              <Icon name="user-plus" size={20} strokeWidth={2} />
             </span>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '.9rem', fontWeight: 700 }}>Pending registrations</div>
-              <div style={{ fontSize: '.76rem', color: '#8b93a3' }}>Awaiting your review</div>
+              <div style={{ fontSize: '.9rem', fontWeight: 700 }}>Create account</div>
+              <div style={{ fontSize: '.76rem', color: '#8b93a3' }}>Set up an investor + login</div>
             </div>
             <Icon name="chevron-right" size={17} color="#9aa1ad" strokeWidth={2} />
           </Link>
 
           <Link
             className="card"
-            href="/console/messages"
+            href="/console/investors"
             style={{ padding: '18px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14 }}
           >
             <span
@@ -129,15 +127,13 @@ export function TeamOverviewView({ vm }: { vm: TeamOverviewVM }) {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontWeight: 800,
-                fontSize: '1.05rem',
               }}
             >
-              {vm.msgUnread}
+              <Icon name="users" size={20} strokeWidth={2} />
             </span>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '.9rem', fontWeight: 700 }}>Investor replies</div>
-              <div style={{ fontSize: '.76rem', color: '#8b93a3' }}>Unread messages</div>
+              <div style={{ fontSize: '.9rem', fontWeight: 700 }}>Investors</div>
+              <div style={{ fontSize: '.76rem', color: '#8b93a3' }}>Manage note terms &amp; logins</div>
             </div>
             <Icon name="chevron-right" size={17} color="#9aa1ad" strokeWidth={2} />
           </Link>

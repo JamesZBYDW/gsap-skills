@@ -128,8 +128,9 @@ defaults in `.env.example` if you omit them).
    **$250,000**, **18.0%**, **$3,750**, "14 of 24 distributions paid", matures
    **April 14, 2027**.
 3. Sign out; sign in as **Investor Relations** (team) → `/console/overview` shows
-   the portfolio KPIs, approaching maturities, and the registration/request/reply
-   queues.
+   the portfolio KPIs and approaching maturities. Open **Create account**, enter a
+   test investor (details + note terms + login) and save; the new investor then
+   signs in and is prompted to set their own password.
 4. Confirm HTTPS and that the response carries `Strict-Transport-Security` and
    `Content-Security-Policy` headers (they're set in `next.config.mjs`).
 
@@ -137,7 +138,7 @@ If you want to run the automated checks against staging:
 
 ```bash
 cd acg-portal && npm install
-npm test                                   # 39 unit tests
+npm test                                   # 48 unit tests
 E2E_BASE_URL="https://acg-staging.example.com" npm run test:e2e   # Playwright smoke
 ```
 

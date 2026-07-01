@@ -8,7 +8,7 @@ import { Icon } from '@/components/Icon';
 import { api, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
 
-type NotifKey = 'distributionPosted' | 'maturityReminder' | 'newMessage';
+type NotifKey = 'distributionPosted' | 'maturityReminder';
 
 const rowLabel: React.CSSProperties = { fontSize: '.82rem', color: '#8b93a3' };
 const rowValue: React.CSSProperties = { fontSize: '.88rem', fontWeight: 600 };
@@ -92,10 +92,7 @@ export function ProfileView({ vm, readOnly }: { vm: ProfileVM; readOnly: boolean
 
       {/* BANKING ON FILE */}
       <div className="card" style={cardStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div className="tileEyebrow">BANKING ON FILE</div>
-          <span className="linkBtn" onClick={() => router.push('/portal/messages')}>Message IR ›</span>
-        </div>
+        <div className="tileEyebrow">BANKING ON FILE</div>
         {vm.banking ? (
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 15 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -109,7 +106,7 @@ export function ProfileView({ vm, readOnly }: { vm: ProfileVM; readOnly: boolean
           <div style={{ marginTop: 16, fontSize: '.88rem', color: '#8b93a3' }}>No banking on file</div>
         )}
         <div className="quietNote" style={{ marginTop: 16 }}>
-          To change banking, message Investor Relations — changes are confirmed by phone before they take effect.
+          To change banking, contact Investor Relations — changes are confirmed by phone before they take effect.
         </div>
       </div>
 
@@ -127,10 +124,6 @@ export function ProfileView({ vm, readOnly }: { vm: ProfileVM; readOnly: boolean
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '.82rem', color: '#0c1f3d', fontWeight: 500 }}>Maturity reminders</span>
             <Toggle on={notif.maturityReminder} disabled={readOnly} onToggle={() => setPref('maturityReminder', !notif.maturityReminder)} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '.82rem', color: '#0c1f3d', fontWeight: 500 }}>New message alerts</span>
-            <Toggle on={notif.newMessage} disabled={readOnly} onToggle={() => setPref('newMessage', !notif.newMessage)} />
           </div>
         </div>
       </div>

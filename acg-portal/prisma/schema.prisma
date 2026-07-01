@@ -24,9 +24,9 @@ enum InvestorType {
 }
 
 enum InvestorState {
-  PENDING // self-registered, awaiting team review
-  AWAITING // approved/created, no wire received yet (no schedule)
-  ACTIVE // wire recorded, schedule generated
+  PENDING // reserved (investors are created by management; no self-registration)
+  AWAITING // created by management, note not yet active (no schedule)
+  ACTIVE // note terms set to active, schedule generated
   DECLINED
 }
 
@@ -41,17 +41,6 @@ enum DistributionStatus {
   PAID
   NEXT
   UPCOMING
-}
-
-enum RegistrationStatus {
-  PENDING
-  APPROVED
-  DECLINED
-}
-
-enum MessageAuthor {
-  INVESTOR
-  TEAM
 }
 
 enum DocumentKind {
@@ -76,8 +65,8 @@ model User {
   // 2FA scaffolding (TOTP secret is encrypted at rest when enabled)
   totpSecret   String?
   totpEnabled  Boolean  @default(false)
-  // Set when management provisions an initial password; investor is prompted to
-  // change it (not hard-enforced).
+  // Set when management provisions an initial password. Investor logins with
+  // this flag are forced to set a new password before entering the portal.
   mustChangePassword Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -146,7 +135,6 @@ model Investor {
   note       Note?
   banking    BankingDetail?
   notifPref  NotifPref?
-  messages   Message[]
   documents  Document[]
 
   @@index([state])
@@ -208,44 +196,7 @@ model NotifPref {
   investor           Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
   distributionPosted Boolean  @default(true)
   maturityReminder   Boolean  @default(true)
-  newMessage         Boolean  @default(false)
   updatedAt          DateTime @updatedAt
-}
-
-// ─── Registrations (request-access front door) ──────────────────────────────
-
-model Registration {
-  id                  String             @id @default(cuid())
-  name                String
-  type                InvestorType
-  email               String
-  intendedPrincipalCents Int?
-  termMonths          Int
-  derivedRateBps      Int
-  status              RegistrationStatus @default(PENDING)
-  infoRequested       Boolean            @default(false)
-  acknowledgedAccredited Boolean         @default(false)
-  submittedAt         DateTime           @default(now())
-  reviewedAt          DateTime?
-  reviewedByUserId    String?
-
-  @@index([status])
-}
-
-// ─── Messages ────────────────────────────────────────────────────────────────
-
-model Message {
-  id              String        @id @default(cuid())
-  investorId      String        // thread is keyed by investor
-  investor        Investor      @relation(fields: [investorId], references: [id], onDelete: Cascade)
-  author          MessageAuthor
-  authorName      String
-  text            String
-  sentAt          DateTime      @default(now())
-  readByInvestor  Boolean       @default(false)
-  readByTeam      Boolean       @default(false)
-
-  @@index([investorId])
 }
 
 // ─── Documents ────────────────────────────────────────────────────────────────
@@ -271,7 +222,7 @@ model AuditLog {
   id          String   @id @default(cuid())
   actorUserId String?
   actor       User?    @relation("ActorAudit", fields: [actorUserId], references: [id], onDelete: SetNull)
-  action      String   // e.g. AUTH_LOGIN, INVESTOR_STATE_CHANGE, BANKING_EDIT, REGISTRATION_APPROVE
+  action      String   // e.g. AUTH_LOGIN, INVESTOR_CREATE, NOTE_TERMS_SET, CREDENTIALS_SET, PASSWORD_CHANGE
   targetType  String?
   targetId    String?
   metadata    Json?
