@@ -122,11 +122,6 @@ model Investor {
   userId    String?       @unique
   user      User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  // Accreditation acknowledgment is a compliance record — persisted with its
-  // confirmation timestamp.
-  accreditationAcknowledged Boolean   @default(false)
-  accreditationConfirmedAt  DateTime?
-
   w9OnFile  Boolean       @default(false)
 
   createdAt DateTime      @default(now())

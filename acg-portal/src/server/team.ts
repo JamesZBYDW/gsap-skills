@@ -103,7 +103,6 @@ export interface InvestorRowVM {
     bankLast4: string;
     bankMethod: string;
     w9OnFile: boolean;
-    accredited: boolean;
   };
 }
 
@@ -148,7 +147,6 @@ export async function getInvestorsRoster(now = new Date()): Promise<InvestorRowV
         bankLast4: i.banking?.last4 ?? '',
         bankMethod: i.banking?.method ?? '',
         w9OnFile: i.w9OnFile,
-        accredited: i.accreditationAcknowledged,
       },
     };
   });

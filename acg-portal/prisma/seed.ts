@@ -27,7 +27,6 @@ interface SeedInvestor {
   principalCents?: number;
   termMonths?: number;
   wireDate?: Date | null;
-  accreditedAt?: Date | null;
   login?: { password: string }; // create an investor User login
   banking?: { bankName: string; last4: string; method: string };
   notif?: { distributionPosted: boolean; maturityReminder: boolean };
@@ -47,7 +46,6 @@ const investorsSeed: SeedInvestor[] = [
     principalCents: $(250_000),
     termMonths: 24,
     wireDate: utcDate(2025, 3, 14), // Apr 14, 2025
-    accreditedAt: utcDate(2025, 3, 10), // Apr 10, 2025
     login: { password: process.env.SEED_INVESTOR_PASSWORD ?? 'ChangeMe!Inv1234' },
     banking: { bankName: 'Chase', last4: '6042', method: 'ACH · monthly' },
     notif: { distributionPosted: true, maturityReminder: true },
@@ -62,7 +60,6 @@ const investorsSeed: SeedInvestor[] = [
     principalCents: $(1_200_000),
     termMonths: 24,
     wireDate: utcDate(2025, 4, 2), // May 2, 2025
-    accreditedAt: utcDate(2025, 4, 1),
   },
   {
     key: 'beckett',
@@ -73,7 +70,6 @@ const investorsSeed: SeedInvestor[] = [
     principalCents: $(500_000),
     termMonths: 36,
     wireDate: utcDate(2023, 6, 21), // Jul 21, 2023
-    accreditedAt: utcDate(2023, 6, 18),
   },
   {
     key: 'crest',
@@ -84,7 +80,6 @@ const investorsSeed: SeedInvestor[] = [
     principalCents: $(750_000),
     termMonths: 18,
     wireDate: null,
-    accreditedAt: utcDate(2026, 5, 20),
   },
   {
     key: 'okafor',
@@ -95,7 +90,6 @@ const investorsSeed: SeedInvestor[] = [
     principalCents: $(300_000),
     termMonths: 24,
     wireDate: utcDate(2024, 8, 12), // Sep 12, 2024
-    accreditedAt: utcDate(2024, 8, 10),
   },
   {
     key: 'juniper',
@@ -106,7 +100,6 @@ const investorsSeed: SeedInvestor[] = [
     principalCents: $(2_000_000),
     termMonths: 36,
     wireDate: utcDate(2023, 8, 28), // Sep 28, 2023
-    accreditedAt: utcDate(2023, 8, 25),
   },
   {
     key: 'bell',
@@ -146,8 +139,6 @@ async function seedInvestors() {
         email: s.email,
         phone: s.phone ?? null,
         state: s.state,
-        accreditationAcknowledged: !!s.accreditedAt,
-        accreditationConfirmedAt: s.accreditedAt ?? null,
         w9OnFile: !!s.w9OnFile,
       },
     });

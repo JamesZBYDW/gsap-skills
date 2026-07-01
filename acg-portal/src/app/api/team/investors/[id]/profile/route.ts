@@ -4,8 +4,8 @@ import { apiRequireTeam } from '@/lib/auth';
 import { investorProfileSchema } from '@/lib/validation';
 import { updateInvestorProfile } from '@/server/lifecycle';
 
-// Management edits an investor's profile data (identity, phone, banking, W-9,
-// accreditation) — what the investor sees read-only on their Profile page.
+// Management edits an investor's profile data (identity, phone, banking, W-9)
+// — what the investor sees read-only on their Profile page.
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   return handle(async () => {
     assertSameOrigin(req);

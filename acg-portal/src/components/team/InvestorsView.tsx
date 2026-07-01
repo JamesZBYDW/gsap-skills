@@ -116,7 +116,6 @@ function InvestorDetail({
   const [pLast4, setPLast4] = useState(pf.bankLast4);
   const [pMethod, setPMethod] = useState(pf.bankMethod);
   const [pW9, setPW9] = useState(pf.w9OnFile);
-  const [pAcc, setPAcc] = useState(pf.accredited);
   const [profileBusy, setProfileBusy] = useState(false);
 
   async function saveProfile() {
@@ -131,7 +130,6 @@ function InvestorDetail({
         bankLast4: pLast4,
         bankMethod: pMethod,
         w9OnFile: pW9,
-        accredited: pAcc,
       });
       toast('Profile saved — the investor sees this on their Profile page');
       onChanged();
@@ -243,10 +241,6 @@ function InvestorDetail({
           <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: '.8rem', color: '#5b6473', cursor: 'pointer' }}>
             <input type="checkbox" data-testid="mp-w9" checked={pW9} onChange={(x) => setPW9(x.target.checked)} />
             Form W-9 on file
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: '.8rem', color: '#5b6473', cursor: 'pointer' }}>
-            <input type="checkbox" data-testid="mp-accredited" checked={pAcc} onChange={(x) => setPAcc(x.target.checked)} />
-            Accredited-investor acknowledgment confirmed
           </label>
           <button className="btnPrimary" data-testid="mp-save" style={{ padding: '11px 18px', fontSize: '.84rem', borderRadius: 10 }} onClick={saveProfile} disabled={profileBusy || pName.trim().length < 2 || !pEmail.includes('@')}>
             {profileBusy ? 'Saving…' : 'Save profile'}

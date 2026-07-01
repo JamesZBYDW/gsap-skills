@@ -36,7 +36,7 @@ export async function getInvestorShell(
     : {
         variant: 'investor',
         name: investor.legalName,
-        sub: 'Accredited investor',
+        sub: 'Investor account',
         avatarText: initials(investor.legalName),
       };
 

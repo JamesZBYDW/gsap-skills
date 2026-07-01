@@ -87,8 +87,7 @@ domain to it. For local end-to-end, `docker compose up` brings up Postgres + app
 
 ## Pre-launch checklist (compliance & security)
 
-- [ ] Counsel has reviewed all investor-facing copy, the term/rate table, and the
-      accredited-investor acknowledgment text.
+- [ ] Counsel has reviewed all investor-facing copy and the term/rate table.
 - [ ] Real admin + investor credentials provisioned; seed/demo accounts removed.
 - [ ] `SESSION_SECRET` / `DOCUMENT_URL_SECRET` set from a secret manager.
 - [ ] Database encrypted at rest, TLS in transit, automated backups + tested restore.

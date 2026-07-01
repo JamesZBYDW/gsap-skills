@@ -25,7 +25,7 @@ You can exercise the flows:
   wire-received date — the distribution amount, first distribution, maturity, and
   status all auto-derive), and **login credentials** (email + password) in one step.
   From an investor's detail panel you can also edit their **profile data** (name,
-  contact email, phone, banking on file, W-9, accreditation — what the investor
+  contact email, phone, banking on file, W-9 — what the investor
   sees read-only on their Profile page), update their note terms, and reset their
   login.
 

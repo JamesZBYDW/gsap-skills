@@ -1,7 +1,7 @@
 # ACG Investor Portal & Team Console
 
 A private, two-sided web application for **Amsterdam Capital Group (ACG)**, a
-yield-focused alternative-credit firm. Accredited investors hold a fixed-rate
+yield-focused alternative-credit firm. Investors hold a fixed-rate
 **ACG Promissory Note**; the portal is where they view their note and manage the
 relationship, and where ACG's Investor Relations (IR) team administers investors.
 
@@ -33,7 +33,7 @@ a Postgres database, server-side authorization, and an audit trail.
 |---|---|
 | Overview (note dashboard **+ full distribution ledger**, one page) | Portfolio overview |
 | Documents (access-controlled; starts empty until the firm issues them) | Investors roster + detail |
-| Profile (banking, accreditation, notifications, change password) | **Create account** (details + terms + login) |
+| Profile (banking, notifications, change password) | **Create account** (details + terms + login) |
 | | Investor detail: **set note terms** + **provision login** |
 
 Access is gated by real permissions (no client-side role trust). Investors see
@@ -52,7 +52,7 @@ account, and out-of-band contact (email/phone) is used for anything conversation
   sign-in credentials the investor will use.
 - **Management owns the investor's profile data.** Everything the investor sees
   read-only on their Profile page — identity, phone, banking on file (recorded
-  after the phone confirmation compliance requires), W-9, accreditation — is
+  after the phone confirmation compliance requires), and W-9 — is
   entered at creation or edited later from the investor's detail panel.
 - **Investor logins are provisioned by management** (from Create account, or later
   from an investor's detail panel): a login email + an initial password (or a
@@ -177,7 +177,7 @@ prisma/                       schema + migrations + seed
 - Documents are private — downloads require session + ownership, with a
   short-lived signed-URL option for out-of-band delivery.
 - Copy honors the brief: "ACG Promissory Note," "fixed for the term — not
-  guaranteed," accredited-investor acknowledgment persisted with a timestamp.
+  guaranteed."
 
 See **`DEPLOY.md`** for production deployment, secrets, migrations, backups, and
 a pre-launch compliance checklist.

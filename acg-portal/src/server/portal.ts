@@ -194,7 +194,6 @@ export interface ProfileVM {
   type: string;
   email: string;
   phone: string;
-  accreditation: { acknowledged: boolean; confirmedDate: string | null };
   banking: { display: string; method: string } | null;
   w9OnFile: boolean;
   notif: { distributionPosted: boolean; maturityReminder: boolean };
@@ -210,10 +209,6 @@ export async function getProfile(investorId: string): Promise<ProfileVM> {
     type: investor.type === 'ENTITY' ? 'Entity' : 'Individual',
     email: investor.email,
     phone: investor.phone ?? '—',
-    accreditation: {
-      acknowledged: investor.accreditationAcknowledged,
-      confirmedDate: investor.accreditationConfirmedAt ? formatDate(investor.accreditationConfirmedAt) : null,
-    },
     banking: investor.banking
       ? { display: maskedAccount(investor.banking.bankName, investor.banking.last4), method: investor.banking.method }
       : null,

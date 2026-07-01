@@ -69,7 +69,7 @@ export async function createInvestorAccount(
 /**
  * Management updates an investor's profile data: identity/contact details,
  * banking on file (recorded by management after the phone confirmation the
- * compliance brief requires), W-9, and the accreditation acknowledgment.
+ * compliance brief requires), and W-9.
  */
 export async function updateInvestorProfile(
   investorId: string,
@@ -94,11 +94,6 @@ export async function updateInvestorProfile(
         type: input.type,
         phone: input.phone,
         w9OnFile: input.w9OnFile,
-        accreditationAcknowledged: input.accredited,
-        // Keep the original confirmation timestamp; stamp it on first acknowledge.
-        accreditationConfirmedAt: input.accredited
-          ? investor.accreditationConfirmedAt ?? new Date()
-          : null,
       },
     });
     // Keep the linked login's display name in sync (login email is managed

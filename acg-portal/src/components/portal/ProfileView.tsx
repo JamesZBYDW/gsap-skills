@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ProfileVM } from '@/server/portal';
 import { Toggle } from '@/components/ui/Toggle';
-import { Icon } from '@/components/Icon';
 import { api, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
 
@@ -67,26 +66,6 @@ export function ProfileView({ vm, readOnly }: { vm: ProfileVM; readOnly: boolean
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={rowLabel}>Phone</span><span style={rowValue}>{vm.phone}</span>
           </div>
-        </div>
-      </div>
-
-      {/* ACCREDITATION */}
-      <div className="card" style={cardStyle}>
-        <div className="tileEyebrow">ACCREDITATION</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
-          <span style={{ width: 40, height: 40, borderRadius: '50%', flex: 'none', background: 'rgba(31,138,91,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="check" size={20} color="#1f8a5b" strokeWidth={2.4} />
-          </span>
-          {vm.accreditation.acknowledged ? (
-            <div>
-              <div style={{ fontSize: '.9rem', fontWeight: 700 }}>Acknowledged</div>
-              <div style={{ fontSize: '.78rem', color: '#8b93a3' }}>Accredited investor · confirmed {vm.accreditation.confirmedDate}</div>
-            </div>
-          ) : (
-            <div>
-              <div style={{ fontSize: '.9rem', fontWeight: 700 }}>Not yet acknowledged</div>
-            </div>
-          )}
         </div>
       </div>
 
