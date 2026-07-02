@@ -83,6 +83,7 @@ Clone this repo and copy the skill folders into the appropriate directory for yo
 | **gsap-react** | React: useGSAP hook, refs, `gsap.context()`, cleanup, SSR |
 | **gsap-performance** | Performance: transforms over layout props, will-change, batching, ScrollTrigger tips |
 | **gsap-frameworks** | Vue, Svelte, etc.: lifecycle, scoping selectors, cleanup on unmount |
+| **personal-homepage-skill** | Personal homepage / portfolio / resume site and 16:9 HTML presentation generation. Vendored from [powerycy/personal-homepage-skill](https://github.com/powerycy/personal-homepage-skill) (non-commercial license — see its bundled LICENSE) |
 
 ## Quick reference (for AI agents)
 
@@ -147,6 +148,7 @@ gsap-skills/
     gsap-react/      SKILL.md
     gsap-performance/  SKILL.md
     gsap-frameworks/ SKILL.md
+    personal-homepage-skill/  # SKILL.md + reference docs + templates/ (vendored from powerycy/personal-homepage-skill, own LICENSE)
   examples/         # Minimal reference demos (vanilla + React)
 ```
 

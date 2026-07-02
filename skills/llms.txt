@@ -37,3 +37,7 @@ gsap-performance
 gsap-frameworks
   Vue, Svelte, and other frameworks: lifecycle, when to create/kill tweens and ScrollTriggers, scoping selectors, cleanup on unmount.
   Triggers: Vue, Svelte, Nuxt, SvelteKit, framework, lifecycle, onMounted, onUnmounted.
+
+personal-homepage-skill
+  Generate personal homepages, portfolios, resume sites, creator/developer/designer profile pages, and 16:9 HTML presentations. Vendored from powerycy/personal-homepage-skill (non-commercial license; see the LICENSE bundled in the skill directory).
+  Triggers: personal homepage, portfolio website, resume homepage, personal brand site, self-introduction page, project showcase, developer portfolio, designer portfolio, creator homepage, HTML presentation, PPT-style slides, 个人主页, 作品集.
