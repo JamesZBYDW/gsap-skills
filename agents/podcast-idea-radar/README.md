@@ -13,6 +13,43 @@ It answers one question on a schedule: *what should we talk about today?*
 
 ---
 
+## Operating reality — read this first
+
+What this environment actually permits, established by probing rather than
+assumption:
+
+| Capability in a scheduled (Routine-fired) container | Result |
+|---|---|
+| WebSearch / WebFetch | ✅ works |
+| `git clone` the repo | ✅ works (public read) |
+| `git push` to the repo | ❌ **403 — repo not in the container's authorized set** |
+| Repo present at start | ❌ empty container; `create_trigger` takes no source parameter |
+| MCP connectors (Gmail etc.) | ❌ unavailable to this org's Routines |
+| `PushNotification` tool | ❌ absent; the run's final message becomes the notification |
+
+**The push denial is the load-bearing one.** The ledger design below depends on
+committing state between runs, and a scheduled run cannot commit. So the radar
+currently ships in a reduced configuration:
+
+- **Daily report — ACTIVE and self-contained.** Scans the previous 24 hours from
+  scratch each morning and delivers the report as its final message, which
+  becomes the email. No repo, no ledger, no git. This is what actually runs.
+- **Hourly pulse — DISABLED.** Without a writable store it cannot accumulate
+  anything between runs, so it would perform 24 redundant scans a day and, having
+  no memory of what it already found, re-notify about the same topics. Disabled
+  deliberately rather than left burning tokens for no benefit.
+
+**To re-enable the full design**, the repo needs push access from scheduled
+containers — add `JamesZBYDW/gsap-skills` to the environment's authorized
+repositories (or supply git credentials with push rights) at
+claude.ai/code → Environments. Then re-enable
+`trig_019oC9H5eJJ2po1u6h32UQ3E` and the ledger, hourly accumulation, computed
+trend stages and threshold pushes all come back — the machinery is already
+written and verified working interactively.
+
+Everything below describes the full design. It is accurate, and it is what runs
+the moment push access exists.
+
 ## How it runs
 
 Two cadences over one shared memory:
