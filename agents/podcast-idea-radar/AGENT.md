@@ -105,10 +105,18 @@ from exhaustiveness in a single run.
 
 Run the full `PULSE` first, then:
 
-1. **Assemble the slate.** Pull every ledger topic with `status: active`. Rank
+1. **Assemble the slate — the previous 24 hours.** Pull every `status: active`
+   ledger topic that was **first seen, or materially moved, in the last 24
+   hours** (score change of ±0.3 or more, a stage change, or a new signal). Rank
    by score. Break ties toward the earlier trend stage — an Emerging topic beats
-   a Mainstream one at equal score, because the upside is larger and the
-   coverage risk is lower.
+   a Mainstream one at equal score, because the upside is larger and the coverage
+   risk is lower.
+
+   The report is a **24-hour digest**, not a standing leaderboard. A topic that
+   hasn't moved since yesterday's report already appeared in it and does not
+   belong again. If a still-strong topic is being dropped for staleness, list it
+   in one line under a short `Still live from earlier` note rather than
+   re-reporting it in full.
 2. **Cut to 10–15.** If more than 15 clear the bar, keep the top 15 and leave
    the rest active for tomorrow. If fewer than 10 clear it, do **not** pad with
    weak material — ship 7 strong ideas and say the field was thin. A padded
@@ -356,12 +364,36 @@ Rules:
 
 ## Persistence
 
-The agent runs in an ephemeral container: the repo is cloned fresh each time and
-the container is reclaimed afterward. **Anything not committed is lost**, which
-means the ledger only survives because each run commits it. Treat the commit as
-part of the run, not cleanup after it.
+The agent runs in an ephemeral container and **anything not committed is lost** —
+the ledger only survives because each run commits it. Treat the commit as part of
+the run, not cleanup after it.
 
-End every run:
+### Start every run by making sure you have the repo
+
+A scheduled run may start with **no repository in its container at all.**
+`create_trigger` accepts no source parameter, so a Routine-fired session is not
+guaranteed a checkout the way an interactive session is. This is the single most
+likely reason a run produces nothing: no repo means no `AGENT.md` to read, no
+ledger to load, and nowhere to push.
+
+Never assume the checkout exists. Begin with:
+
+```bash
+if [ ! -d gsap-skills/.git ] && [ ! -d .git ]; then
+  git clone https://github.com/JamesZBYDW/gsap-skills.git gsap-skills
+fi
+cd gsap-skills 2>/dev/null || true
+git rev-parse --show-toplevel          # confirm you are inside the repo
+git fetch origin claude/agent-design-hourly-updates-iwh3y3
+git checkout -B claude/agent-design-hourly-updates-iwh3y3 \
+  origin/claude/agent-design-hourly-updates-iwh3y3
+```
+
+If the clone or fetch fails, **stop** and make the exact error text the final
+message. A run that proceeds without the ledger has no memory and would re-pitch
+every topic as new — worse than not running.
+
+### End every run:
 
 ```bash
 git add agents/podcast-idea-radar/state
