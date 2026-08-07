@@ -23,13 +23,17 @@ what *changed*: new topics, score movements, trend-stage promotions, kills. A
 quiet hour says "no material change" in three lines. This is deliberate — a full
 report every hour would hand you the same fifteen ideas twenty-four times.
 
-**Daily — `REPORT`.** The full ranked slate: 10–15 ideas with the story, why now,
-the bigger question, discussion angles, opposing views, trend stage, score, and a
-research trail. Plus *Internet Conversations Worth Watching*, *China vs. US*
-where a real contrast exists, and **TOP 3 I WOULD RECORD** with opening hooks.
+**Daily — `REPORT`, 05:15 ET.** The full ranked slate: 10–15 ideas with the story,
+why now, the bigger question, discussion angles, opposing views, trend stage,
+score, and a research trail. Plus *Internet Conversations Worth Watching*,
+*China vs. US* where a real contrast exists, and **TOP 3 I WOULD RECORD** with
+opening hooks. Emailed, and committed to `state/reports/`.
 
 The daily report is a roll-up of what the pulses accumulated, which is why the
 hourly runs are cheap and the daily one is worth reading.
+
+It fires at 05:15 ET rather than 06:00 because "by 6am" is a deadline — the run
+needs room to finish first.
 
 ## What you get notified about
 
@@ -52,6 +56,25 @@ from the run's final message — so the agent ends a gated run with just the
 one-line headline and ends a quiet run with a single quiet marker. All the detail
 goes into the committed pulse note instead. See `AGENT.md` § Delivery channel.
 
+## Email
+
+The daily report arrives by email at the account's registered address, built from
+the run's final message — digest line first (that's the push), then TOP 3, then
+the full slate.
+
+Two limits worth knowing, both environmental rather than design choices:
+
+- **Routine notifications have no configurable recipient.** They go to the account
+  address. Delivering to `jameszhangby@outlook.com` automatically needs a one-time
+  forwarding rule set up on the receiving side.
+- **Scheduled runs have no Gmail connector** (unavailable to this org's Routines),
+  and the Gmail connector has **no send tool** even where it is available — only
+  `create_draft`. So an interactively-run report can leave a ready-to-send draft
+  addressed anywhere, but no automated path composes and sends mail directly.
+
+The committed `state/reports/YYYY-MM-DD.md` is the durable copy regardless of what
+any notification channel does.
+
 ## The ledger is the point
 
 `state/ledger.jsonl` is what makes an hourly cadence produce signal instead of
@@ -63,6 +86,10 @@ Three things fall out of it:
 - **No repeats.** Topics are identified by their *underlying question*, not their
   headline — so three stories about three different AI companion apps collapse
   into one episode idea instead of cluttering three slots.
+- **Only new topics get recorded.** A repeat appends a signal to the line that
+  already exists rather than adding a new one, and anything scoring under 5.5
+  with flat momentum gets no record at all. The file grows only with genuinely
+  new material; existing lines change in place.
 - **Real trend stages.** Emerging / Rising / Mainstream / Peaking / Saturated are
   *computed* from how signal counts moved over time, not guessed. That's the only
   way "Emerging" carries information.

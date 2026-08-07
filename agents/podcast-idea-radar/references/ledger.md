@@ -9,6 +9,57 @@ costs one topic instead of the whole store.
 
 ---
 
+## What gets a record
+
+**Only genuinely new topics create records.** A repeat of something already
+tracked is never a new line — the whole point of the ledger is that the same
+conversation resurfacing under a new headline costs zero additional entries.
+
+| Candidate | Ledger action |
+|-----------|---------------|
+| New topic, score ≥ 5.5 | **New record** |
+| New topic, score < 5.5, accelerating | **New record**, `status: watching` |
+| New topic, score < 5.5, flat | **Nothing.** Mention in the pulse if interesting, then drop |
+| Matches an existing fingerprint | **No new record.** Append a signal, update score/stage in place |
+| Caught by a kill rule | **Compact stub only** (see below) |
+
+### The recording floor
+
+A candidate scoring below **5.5** with no positive acceleration does not enter
+the ledger. It isn't an episode, it isn't a Watchlist item, and storing it just
+makes every future dedup pass more expensive. If it matters later it will come
+back with more signal behind it, and it can be recorded then.
+
+### Compact kill stub
+
+Killed topics do not need the full schema — only enough to avoid re-scoring the
+same junk every hour:
+
+```json
+{"id":"celebrity-divorce-filing-aug","fingerprint":"two celebrities filed for divorce","status":"killed","kill_reason":"routine celebrity news — no larger question","t":"2026-08-07T09:00:00Z"}
+```
+
+Roughly a tenth the size of a full record, and it does the one job a kill needs
+to do.
+
+### Why existing records still get written
+
+Updating a topic already in the ledger is **not** the same as recording it again.
+It is an in-place field update on a line that already exists — no new entry, no
+growth. Those updates are load-bearing:
+
+- Appending a signal is what makes acceleration computable, which is what makes
+  trend stage real rather than guessed.
+- Which is what makes the **Emerging → Rising** push possible.
+
+Skipping them would mean re-discovering and re-scoring the same topics from
+scratch every hour — *more* wasted work than the updates cost, and no early
+detection at all.
+
+So: **the file grows only with new topics; existing lines change in place.**
+
+---
+
 ## Record schema
 
 ```json

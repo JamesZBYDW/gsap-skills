@@ -29,22 +29,29 @@ The radar runs on two cadences that share one ledger. This split exists because
 regenerating a full ranked report every hour would produce the same fifteen
 ideas twenty-four times a day.
 
-| Mode | Cadence | Job | Output | Push |
-|------|---------|-----|--------|------|
-| **PULSE** | hourly | Delta scan: what changed since the last run | ~1 screen | Only if the gate opens |
-| **REPORT** | daily, first run after 06:00 local | Full ranked slate | 10–15 ideas + specials + TOP 3 | Always (one digest) |
+| Mode | Cadence | Job | Output | Delivery |
+|------|---------|-----|--------|----------|
+| **PULSE** | hourly | Delta scan: what changed since the last run | ~1 screen | Push only if the gate opens |
+| **REPORT** | daily, 05:15 ET | Full ranked slate | 10–15 ideas + specials + TOP 3 | Email + one push digest |
 
 `PULSE` is cheap and additive. `REPORT` is expensive and synthesizes what the
 pulses accumulated. A `REPORT` run does a `PULSE` first, then rolls up.
 
+The two modes run on **separate schedules**, so the daily report lands at a
+predictable hour rather than whenever the first post-dawn pulse happens to fire.
+
 Determine mode at the start of every run:
 
 1. Read `state/ledger.jsonl` and `state/last-report`.
-2. If `state/last-report` holds a date earlier than today **and** local time is
-   past 06:00 → mode is `REPORT`. An empty, missing, or unparseable
-   `last-report` counts as earlier than today, so the first run after 06:00 on a
-   fresh checkout produces a full report.
-3. Otherwise → mode is `PULSE`.
+2. **If the run prompt explicitly names a mode, that wins.** The daily schedule
+   asks for `REPORT` directly — don't re-derive it from the clock.
+3. Otherwise, fall back to inference: if `state/last-report` holds a date earlier
+   than today **and** local time is past 06:00 → `REPORT`. An empty, missing, or
+   unparseable `last-report` counts as earlier than today.
+4. Otherwise → `PULSE`.
+
+If a `REPORT` already ran today (`last-report` is today's date), a second
+`REPORT` request downgrades to `PULSE`. One report per day.
 
 On a cold start the ledger is empty, so the first `PULSE` will find everything
 "new" and score a large batch from scratch. That is expected. Suppress pushes on
@@ -74,10 +81,17 @@ from exhaustiveness in a single run.
 5. **Score and stage.** New topics get a full score. Known topics get their
    score and trend stage recomputed from the updated signal counts. Both per
    `references/scoring.md` and the stage rules in `references/ledger.md`.
-6. **Apply kill rules.** Drop anything the Avoid list catches. Record kills in
-   the ledger with a reason so later runs don't resurface them.
-7. **Write the ledger.** Append new topics, update changed ones. Leave untouched
-   topics untouched.
+6. **Apply kill rules.** Drop anything the Avoid list catches. Write a compact
+   kill stub so later runs don't re-evaluate the same junk.
+7. **Write the ledger — new topics only.** The ledger grows only when the run
+   found something genuinely new. See the recording floor in
+   `references/ledger.md`:
+   - **New topic above the floor** → new record.
+   - **Matches an existing topic** → *no new record.* Append a signal to the
+     record that already exists and update its score and stage in place.
+   - **Below the floor** → no record at all. Mention it in the pulse if it's
+     interesting, and drop it.
+   - **Killed** → compact stub, not a full record.
 8. **Emit the pulse note.** Use the PULSE template in `references/templates.md`.
    Report only deltas: new topics, score moves, stage promotions, kills,
    retractions. A quiet hour is a legitimate result — say "no material change"
@@ -113,8 +127,51 @@ Run the full `PULSE` first, then:
    One (why it beats the other candidates), Opening Hook (a provocative question
    or observation that could start the conversation), and The Central Debate in
    one sentence.
-7. **Save** to `state/reports/YYYY-MM-DD.md`, write today's date to
-   `state/last-report`, push the digest, commit.
+7. **Save** to `state/reports/YYYY-MM-DD.md` and write today's date to
+   `state/last-report`.
+8. **Deliver by email** (below), then push the one-line digest and commit.
+
+### Email delivery
+
+The report is emailed daily, timed to land before 06:00 ET. The schedule fires at
+**05:15 ET** to leave room for the run itself — "by 6am" is a deadline, not a
+start time.
+
+**On the scheduled path, the report *is* the final message.** The daily Routine
+has email notifications enabled, and that email is built from how the run ends.
+There is no Gmail tool in a scheduled session — MCP connectors are unavailable to
+this organization's Routines — so do **not** try to compose mail directly.
+
+Structure the final message in this exact order:
+
+1. **First line** — the one-line digest, under 200 characters, no markdown. This
+   is what shows on the phone as a push, so it must stand alone.
+2. **TOP 3 I WOULD RECORD**, in full. Highest in the body because it's what gets
+   read on a phone at 6am.
+3. **The full ranked slate**, then the Watchlist, then China vs. US if real.
+4. **Last line** — the path of the committed report.
+
+Push truncates and email does not, which is exactly why the digest goes first and
+must work in isolation. Everything after it is the email body.
+
+**Where it lands:** the completion email goes to the **account's registered
+address**, not to an arbitrary recipient — Routine notifications have no
+configurable "to". Reaching `jameszhangby@outlook.com` automatically needs a
+one-time forwarding rule on the receiving side; nothing in this agent can create
+that.
+
+**Interactive runs** *do* have the Gmail connector, so a `REPORT` run started by
+hand can additionally compose a draft with `mcp__Gmail__create_draft` — to
+`jameszhangby@outlook.com`, subject
+`Podcast Radar — <YYYY-MM-DD> — Top: <#1 title> (<score>)`, the report as simple
+HTML in `htmlBody` (h2/h3, blockquote, ul, a href — no CSS frameworks or external
+images; Outlook strips them) and the Markdown in `body`. Note that `create_draft`
+is the only compose tool: **there is no Gmail send tool**, so this leaves a draft
+needing one tap, never a sent message. Never report a delivery that did not
+happen.
+
+**Always commit `state/reports/YYYY-MM-DD.md` regardless.** That copy is the
+durable one — it survives whatever any notification channel does.
 
 ---
 
