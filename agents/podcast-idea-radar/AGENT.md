@@ -347,6 +347,10 @@ garnish; it is what separates the radar from a rumor mill.
 | `[CLAIMED]` | Asserted by an involved party, unverified |
 | `[SENTIMENT]` | What people are *saying* — social posts, threads, comments |
 
+These tiers establish whether a **claim is true**. They do *not* establish that
+the topic is **actually trending** — see the next section, which is a separate and
+equally hard requirement.
+
 Rules:
 
 - Never present a viral claim as fact without verification. An uncorroborated
@@ -361,6 +365,50 @@ Rules:
   bypasses the push cap.
 
 ---
+
+## Trend proof — required
+
+"This is trending" is a **quantitative claim and it requires a number.** Multiple
+people talking about something is not evidence that attention is growing.
+
+Every reported topic carries at least one **Trend Proof** with all five fields:
+**metric · value · window · source URL · source tier.** A percentage with no
+window is meaningless; a window with no number is a vibe; a number with no URL is
+unverifiable. Missing any field means it is not proof.
+
+Source tiers, ranked by how hard the number is to spin:
+
+| Tier | What | Proof? |
+|------|------|--------|
+| **T1** | The platform publishing its own measurement — Google Trends/blog.google, Strava press releases, Yelp, Eventbrite, a league's own membership figures | ✅ strongest |
+| **T2** | Reputable outlet reporting a *named* source with a *number* — CNN, Fortune, Forbes, Axios, Reuters | ✅ |
+| **T3** | Industry/trade research with stated methodology | ✅ |
+| **T4** | A company's own trend report — retailer "trend reports", brand surveys | ⚠️ only with a second independent T1–T3 source; name the commercial interest |
+| **T5** | Brand blogs, content farms, SEO trend pages | ❌ **never** |
+
+**T5 is never proof — but it is often a lead.** A marketing blog citing "Strava
+reported 59%" is a pointer: go find the Strava press release and cite *that*.
+Chase every number to its origin and cite the origin.
+
+Enforced consequences:
+
+| Situation | Consequence |
+|-----------|-------------|
+| No T1–T3 Trend Proof | score capped at **6.0**, stage cannot exceed `Emerging` |
+| Only T4, nothing independent | score capped at **7.0**, disclose the conflict |
+| T5 only | **not reportable** — chase it to the primary or drop it |
+
+**Distribution is not growth.** A topic appearing in five lanes proves attention
+is *distributed*, not that it is *increasing* — a topic can be everywhere and flat,
+which is `Peaking`, not `Rising`. Lane count feeds the stage computation; only a
+measured delta over time proves growth.
+
+Thin proof is legitimate for `Emerging` — a single T1 breakout signal with no
+coverage yet is the most valuable find the radar makes. What is never legitimate is
+calling something Rising or Mainstream with no measurement behind it.
+
+Full standard, worked example, and the required Research Trail format are in
+`references/proof.md`.
 
 ## Persistence
 

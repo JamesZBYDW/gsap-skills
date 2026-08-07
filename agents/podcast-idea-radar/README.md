@@ -188,6 +188,7 @@ ages out, and one that makes someone genuinely want to know doesn't.
 | `AGENT.md` | Role, cadence, run protocols, notification gate — start here |
 | `references/scoring.md` | Weighted rubric, anchors, modifiers, kill rules, worked example |
 | `references/sources.md` | Lane definitions, rotation table, query patterns |
+| `references/proof.md` | **Trend proof standard** — source tiers T1–T5, required fields, score caps |
 | `references/ledger.md` | State schema, dedup identity rule, stage computation |
 | `references/templates.md` | PULSE note, REPORT, push copy, retraction |
 | `state/ledger.jsonl` | Topic memory (starts empty) |
