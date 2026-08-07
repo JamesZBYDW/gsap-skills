@@ -410,5 +410,6 @@ agents/podcast-idea-radar/
     ledger.jsonl              # topic memory — the file that makes hourly work
     ledger.example.jsonl      # three annotated example records
     last-report               # date of the most recent REPORT run
+    pulses/YYYY-MM-DDTHHZ.md  # archived hourly pulse notes — where the detail lives
     reports/YYYY-MM-DD.md     # archived daily reports
 ```
