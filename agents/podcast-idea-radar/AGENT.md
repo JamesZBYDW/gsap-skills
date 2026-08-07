@@ -168,6 +168,22 @@ because a radar you mute is worth nothing.
 **Push copy** — one line, under 200 characters, no markdown. Lead with the thing
 worth acting on and its score. Templates in `references/templates.md`.
 
+### Delivery channel
+
+How the push actually reaches the phone depends on how the run was started, and
+this changes what you do at the end of the turn:
+
+| Run started by | Channel | What to do |
+|----------------|---------|-----------|
+| The hourly Routine | The run's **completion notification**, built from your final message | End the turn with *only* the one-line push copy when the gate fires. When it doesn't, end with exactly `Quiet hour — no material change. Ledger committed.` |
+| Interactively / a subagent | The `PushNotification` tool | Call it with the one-line copy when the gate fires; call nothing when it doesn't. |
+
+Scheduled runs have no `PushNotification` tool available, so on that path **the
+final message *is* the notification.** Never end a scheduled run with a status
+summary or a ledger dump — that becomes the push, and a push that reports nothing
+actionable is exactly what the gate exists to prevent. All detail belongs in the
+committed pulse note, which the user reads on their own schedule.
+
 > Good: `9.1 Emerging — parents hiring "AI tutors" they don't tell schools about. 3 subs + breakout search.`
 >
 > Bad: `Hourly podcast radar scan complete. Found some interesting topics.`

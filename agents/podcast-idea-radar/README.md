@@ -47,6 +47,11 @@ a day instead of 24:
 Capped at **4 threshold pushes/day** (digest and retractions exempt). Everything
 below the bar lands silently in the commit, where you can read it whenever.
 
+On the scheduled path the push is the Routine's completion notification, built
+from the run's final message — so the agent ends a gated run with just the
+one-line headline and ends a quiet run with a single quiet marker. All the detail
+goes into the committed pulse note instead. See `AGENT.md` § Delivery channel.
+
 ## The ledger is the point
 
 `state/ledger.jsonl` is what makes an hourly cadence produce signal instead of
