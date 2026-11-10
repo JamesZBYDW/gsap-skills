@@ -19,9 +19,19 @@ async function signIn(page: Page, role: 'Investor' | 'Investor Relations', email
 
 const NO_STORE = 'private, no-store';
 
-/** Call a 2FA settings endpoint directly with the page's cookies (same origin). */
-async function settingsApi(page: Page, path: string, data: Record<string, string>) {
-  return page.request.post(path, { data, headers: { origin: new URL(page.url()).origin } });
+/**
+ * Call a 2FA settings endpoint directly from inside the page (same origin,
+ * the page's cookies). Deliberately NOT page.request: that runs outside the
+ * browser and would bypass any local host mapping.
+ */
+async function settingsApi(page: Page, path: string, data: Record<string, string>): Promise<{ status: number; body: unknown }> {
+  return page.evaluate(
+    async ([p, d]) => {
+      const res = await fetch(p as string, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d), credentials: 'same-origin' });
+      return { status: res.status, body: await res.json().catch(() => null) };
+    },
+    [path, data] as const,
+  );
 }
 
 async function signOut(page: Page) {
@@ -138,9 +148,8 @@ test('investor: enroll from the portal, staff impersonation is read-only, sign-i
   // While the read-only view is active, the settings APIs refuse even direct
   // calls — neither the investor's nor the staff member's own factor changes.
   const blocked = await settingsApi(page, '/api/mfa/enroll/start', { password: TEAM_PASSWORD });
-  expect(blocked.status()).toBe(403);
-  expect(await blocked.json()).toEqual({ error: 'Read-only view.' });
-  expect((await settingsApi(page, '/api/mfa/disable', { password: TEAM_PASSWORD, code: codes[5]! })).status()).toBe(403);
+  expect(blocked).toEqual({ status: 403, body: { error: 'Read-only view.' } });
+  expect((await settingsApi(page, '/api/mfa/disable', { password: TEAM_PASSWORD, code: codes[5]! })).status).toBe(403);
   await page.goto('/console/security');
   await expect(page.getByText('Stop viewing the investor portal before changing your two-factor settings.')).toBeVisible();
   await expect(page.getByTestId('mfa-enable')).toHaveCount(0);
@@ -181,6 +190,5 @@ test('a session still on a management-issued password cannot change two-factor s
   await page.goto('/portal/security');
   await page.waitForURL('**/change-password');
   const res = await settingsApi(page, '/api/mfa/enroll/start', { password: issued });
-  expect(res.status()).toBe(403);
-  expect(await res.json()).toEqual({ error: 'Set your password before changing two-factor settings.' });
+  expect(res).toEqual({ status: 403, body: { error: 'Set your password before changing two-factor settings.' } });
 });
