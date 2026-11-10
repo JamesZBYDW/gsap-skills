@@ -97,9 +97,10 @@ domain to it. For local end-to-end, `docker compose up` brings up Postgres + app
 - [ ] `SESSION_SECRET` / `DOCUMENT_URL_SECRET` set from a secret manager.
 - [ ] Database encrypted at rest, TLS in transit, automated backups + tested restore.
 - [ ] Audit log retention + export configured (`AuditLog` table).
-- [ ] Banking-change process: out-of-band phone confirmation is enforced before
-      any banking detail is applied (the portal records the request; it does not
-      auto-apply).
+- [ ] Banking-change process: Investor Relations confirms every banking change
+      with the investor by phone (out of band) before recording it in the
+      investor's detail panel. The portal does not enforce that call — it is a
+      written procedure — but every edit is audited as `BANKING_EDIT`.
 - [ ] Distributed rate limiter (Redis) wired if running multi-instance/serverless.
 - [ ] Email provider wired for password reset + investor onboarding invites
       (scaffolding present: `PasswordReset` model; provisioning is a TODO).

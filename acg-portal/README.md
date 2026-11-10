@@ -52,7 +52,7 @@ account, and out-of-band contact (email/phone) is used for anything conversation
   sign-in credentials the investor will use.
 - **Management owns the investor's profile data.** Everything the investor sees
   read-only on their Profile page — identity, phone, banking on file (recorded
-  after the phone confirmation compliance requires), and W-9 — is
+  after the phone confirmation compliance requires) — is
   entered at creation or edited later from the investor's detail panel.
 - **Investor logins are provisioned by management** (from Create account, or later
   from an investor's detail panel): a login email + an initial password (or a
@@ -172,7 +172,7 @@ prisma/                       schema + migrations + seed
 - Server-side authorization on every endpoint; investors are scoped to their own
   data, team by role. No client-side role trust.
 - Immutable **audit log** for logins, state changes, note-term updates,
-  credential provisioning, password changes, approvals, banking edits,
+  credential provisioning, password changes, profile and banking edits,
   impersonation, and downloads.
 - Documents are private — downloads require session + ownership, with a
   short-lived signed-URL option for out-of-band delivery.
