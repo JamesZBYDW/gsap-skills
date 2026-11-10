@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { api, ApiError } from '@/lib/api-client';
 import logoCream from '../../../public/acg-logo-cream.png';
+import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '@/lib/password-policy';
 
 // Shown once, on an investor's first sign-in with a management-issued password.
 export function ForcedPasswordChange() {
@@ -76,13 +77,13 @@ export function ForcedPasswordChange() {
             data-testid="fp-submit"
             style={{ width: '100%', marginTop: 22 }}
             onClick={submit}
-            disabled={busy || next.length < 10 || !confirm}
+            disabled={busy || next.length < PASSWORD_MIN_LENGTH || !confirm}
           >
             {busy ? 'Saving…' : 'Set password & continue'}
           </button>
 
           <div style={{ textAlign: 'center', marginTop: 16, fontSize: '.74rem', color: '#6c7a93' }}>
-            At least 10 characters, with letters and numbers.
+            {PASSWORD_HINT}
           </div>
         </div>
       </div>

@@ -75,15 +75,5 @@ export function needsRehash(stored: string): boolean {
   return !parsed || parsed.logN < SCRYPT_LOG_N || parsed.p < SCRYPT_P;
 }
 
-// Basic password policy. Counsel/security may strengthen (breach checks, etc.).
-export const MIN_PASSWORD_LENGTH = 10;
-
-export function passwordPolicyError(plain: string): string | null {
-  if (typeof plain !== 'string' || plain.length < MIN_PASSWORD_LENGTH) {
-    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
-  }
-  if (!/[a-zA-Z]/.test(plain) || !/[0-9]/.test(plain)) {
-    return 'Password must include both letters and numbers.';
-  }
-  return null;
-}
+// The password policy (length, letters + numbers) is shared with client code.
+export { passwordPolicyError, PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from './password-policy';

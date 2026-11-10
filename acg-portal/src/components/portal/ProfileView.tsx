@@ -6,6 +6,7 @@ import type { ProfileVM } from '@/server/portal';
 import { Toggle } from '@/components/ui/Toggle';
 import { api, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
+import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '@/lib/password-policy';
 
 type NotifKey = 'distributionPosted' | 'maturityReminder';
 
@@ -121,11 +122,11 @@ export function ProfileView({ vm, readOnly }: { vm: ProfileVM; readOnly: boolean
             className="btnPrimary"
             style={{ alignSelf: 'flex-start', padding: '10px 18px', fontSize: '.84rem', borderRadius: 10 }}
             onClick={changePassword}
-            disabled={readOnly || pwBusy || !cur || next.length < 10}
+            disabled={readOnly || pwBusy || !cur || next.length < PASSWORD_MIN_LENGTH}
           >
             {pwBusy ? 'Updating…' : 'Update password'}
           </button>
-          <div style={{ fontSize: '.74rem', color: '#8b93a3' }}>At least 10 characters, with letters and numbers.</div>
+          <div style={{ fontSize: '.74rem', color: '#8b93a3' }}>{PASSWORD_HINT}</div>
         </div>
       </div>
     </div>

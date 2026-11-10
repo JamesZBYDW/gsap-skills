@@ -7,6 +7,7 @@ import { api, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
 import { TERM_OPTIONS } from '@/lib/rates';
 import { computeDistributionDollars, addMonthsISO, addDaysISO, formatISOToLong } from '@/lib/noteterms';
+import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '@/lib/password-policy';
 
 type AccountType = 'INDIVIDUAL' | 'ENTITY';
 
@@ -54,7 +55,7 @@ export function CreateAccountView() {
     setPassword(p + '2a');
   }
 
-  const canSubmit = name.trim().length >= 2 && email.includes('@') && password.length >= 10 && !busy;
+  const canSubmit = name.trim().length >= 2 && email.includes('@') && password.length >= PASSWORD_MIN_LENGTH && !busy;
 
   async function submit() {
     setBusy(true);
@@ -166,7 +167,7 @@ export function CreateAccountView() {
               Require the investor to set their own password on first sign-in
             </label>
             <div style={{ fontSize: '.74rem', color: '#8b93a3' }}>
-              At least 10 characters, letters + numbers. Share the login email + password with the investor securely.
+              {PASSWORD_HINT} Share the login email + password with the investor securely.
             </div>
           </div>
         </div>

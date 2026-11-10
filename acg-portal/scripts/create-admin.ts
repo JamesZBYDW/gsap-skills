@@ -15,10 +15,10 @@
 
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { hashPassword, passwordPolicyError } from '../src/lib/password-core';
+import { hashPassword } from '../src/lib/password-core';
+import { passwordPolicyError } from '../src/lib/password-policy';
 
 const DB_NAME = 'acg-portal-production';
-const ADMIN_MIN_LENGTH = 12;
 
 function fail(message: string, code = 1): never {
   console.error(`create-admin: ${message}`);
@@ -113,7 +113,6 @@ async function main() {
   const password = await readSecret(`Password for ${email} (input hidden): `);
   const problem = passwordPolicyError(password);
   if (problem) fail(problem);
-  if (password.length < ADMIN_MIN_LENGTH) fail(`Admin passwords must be at least ${ADMIN_MIN_LENGTH} characters.`);
   if (process.stdin.isTTY) {
     const again = await readSecret('Repeat password: ');
     if (again !== password) fail('Passwords do not match.');

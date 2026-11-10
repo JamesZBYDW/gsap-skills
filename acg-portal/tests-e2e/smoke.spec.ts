@@ -123,8 +123,11 @@ test('management sets terms + login on an existing investor; they sign in and se
 // their overview with the schedule generated from the entered terms.
 test('management creates an account; investor is forced to set a password, then sees the schedule', async ({ page }) => {
   const contact = 'northwind@acg.example';
-  const issued = 'Northwind2026x';
-  const chosen = 'Aurora2026zzz';
+  // Exactly the 8-character minimum (letters + numbers), synthetic test values.
+  const issued = 'North26x';
+  const chosen = 'Aurora26';
+  expect(issued).toHaveLength(8);
+  expect(chosen).toHaveLength(8);
 
   await signIn(page, 'Investor Relations', TEAM_EMAIL, TEAM_PASSWORD);
   await page.waitForURL('**/console/overview');
@@ -144,7 +147,11 @@ test('management creates an account; investor is forced to set a password, then 
   await expect(page.getByTestId('ca-first')).toHaveValue('October 1, 2026');
   await expect(page.getByTestId('ca-status')).toHaveValue('Active');
   // Login email defaults to the contact email; keep "require change" checked.
+  // The UI gate matches the server policy: 7 characters keeps Create disabled.
+  await page.getByTestId('ca-password').fill(issued.slice(0, 7));
+  await expect(page.getByTestId('ca-submit')).toBeDisabled();
   await page.getByTestId('ca-password').fill(issued);
+  await expect(page.getByTestId('ca-submit')).toBeEnabled();
   await page.getByTestId('ca-submit').click();
   await page.waitForURL('**/console/investors');
   await expect(page.getByText('Northwind Partners', { exact: true })).toBeVisible();
@@ -156,6 +163,9 @@ test('management creates an account; investor is forced to set a password, then 
   await signIn(page, 'Investor', contact, issued);
   await page.waitForURL('**/change-password');
   await expect(page.getByText('Set your password')).toBeVisible();
+  await page.getByTestId('fp-new').fill(chosen.slice(0, 7));
+  await page.getByTestId('fp-confirm').fill(chosen.slice(0, 7));
+  await expect(page.getByTestId('fp-submit')).toBeDisabled();
   await page.getByTestId('fp-new').fill(chosen);
   await page.getByTestId('fp-confirm').fill(chosen);
   await page.getByTestId('fp-submit').click();

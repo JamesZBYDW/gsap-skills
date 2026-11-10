@@ -10,6 +10,7 @@ import { api, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
 import { TERM_OPTIONS } from '@/lib/rates';
 import { computeDistributionDollars, addMonthsISO, addDaysISO, formatISOToLong } from '@/lib/noteterms';
+import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '@/lib/password-policy';
 
 const STATES = ['All', 'Active', 'Awaiting', 'Expired'] as const;
 
@@ -293,11 +294,11 @@ function InvestorDetail({
             <input type="checkbox" checked={mustChange} onChange={(x) => setMustChange(x.target.checked)} />
             Require the investor to change it after first sign-in
           </label>
-          <button className="btnPrimary" data-testid="cred-save" style={{ padding: '11px 18px', fontSize: '.84rem', borderRadius: 10 }} onClick={setLogin} disabled={credBusy || password.length < 10}>
+          <button className="btnPrimary" data-testid="cred-save" style={{ padding: '11px 18px', fontSize: '.84rem', borderRadius: 10 }} onClick={setLogin} disabled={credBusy || password.length < PASSWORD_MIN_LENGTH}>
             {credBusy ? 'Saving…' : investor.hasLogin ? 'Reset login' : 'Create login'}
           </button>
           <div style={{ fontSize: '.74rem', color: '#8b93a3' }}>
-            {investor.hasLogin ? 'This investor already has a login. Resetting sets a new password.' : 'Creates the investor’s sign-in. Share the email + password securely; they can change it in Profile.'} At least 10 characters, letters + numbers.
+            {investor.hasLogin ? 'This investor already has a login. Resetting sets a new password.' : 'Creates the investor’s sign-in. Share the email + password securely; they can change it in Profile.'} {PASSWORD_HINT}
           </div>
         </div>
       </div>

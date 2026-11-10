@@ -85,7 +85,8 @@ npm run admin:create -- --remote --email <admin email> --name "<Full Name>"
 ```
 
 The password is read from the terminal with echo off and asked for twice. It
-must be at least 12 characters with letters and numbers. It is never printed,
+must be at least 8 characters with letters and numbers (the same policy as
+every portal password: `src/lib/password-policy.ts`). It is never printed,
 logged or written to disk. Only its scrypt hash is sent to D1, and the
 wrangler child process runs with `WRANGLER_WRITE_LOGS=false` and
 `WRANGLER_LOG_SANITIZE=true`.

@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import {
+  hasLettersAndNumbers,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_NEEDS_MIX,
+  PASSWORD_TOO_LONG,
+  PASSWORD_TOO_SHORT,
+} from './password-policy';
 import { MIN_PRINCIPAL_CENTS, MAX_PRINCIPAL_CENTS, isSupportedTerm } from './rates';
 import { parseMoneyToCents } from './money';
 
@@ -58,11 +66,9 @@ const isoDate = z
 
 const passwordField = z
   .string()
-  .min(10, 'Password must be at least 10 characters.')
-  .max(200)
-  .refine((v) => /[a-zA-Z]/.test(v) && /[0-9]/.test(v), {
-    message: 'Password must include both letters and numbers.',
-  });
+  .min(PASSWORD_MIN_LENGTH, PASSWORD_TOO_SHORT)
+  .max(PASSWORD_MAX_LENGTH, PASSWORD_TOO_LONG)
+  .refine(hasLettersAndNumbers, { message: PASSWORD_NEEDS_MIX });
 
 // Optional free-form phone; blank → null.
 const phoneField = z

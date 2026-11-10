@@ -64,6 +64,13 @@ describe('create-admin CLI', () => {
     expect(sql(`SELECT id FROM sessions WHERE user_id = '${u!.id}'`)).toHaveLength(0);
   }, 120_000);
 
+  it('accepts an 8-character letters+numbers password (the shared minimum)', () => {
+    const r = admin('eight@example.com', 'Eight Chars', 'abcde123');
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/Team login created: eight@example.com/);
+    expect(r.stdout + r.stderr).not.toContain('abcde123');
+  }, 120_000);
+
   it('stays correct and silent under an inherited WRANGLER_LOG=debug', () => {
     const r = admin('debug@example.com', 'Debug Person', 'Inherited2026debugpw', [], { WRANGLER_LOG: 'debug' });
     expect(r.status).toBe(0);
@@ -87,7 +94,11 @@ describe('create-admin CLI', () => {
   }, 120_000);
 
   it('rejects weak passwords, a missing target, and remote seeding-style misuse', () => {
-    expect(admin('a@example.com', 'A', 'short1').stderr).toMatch(/at least/);
+    const seven = admin('seven@example.com', 'Seven', 'abcde12'); // 7 chars, letters + numbers
+    expect(seven.status).not.toBe(0);
+    expect(seven.stderr).toMatch(/at least 8 characters/);
+    expect(sql("SELECT id FROM users WHERE email = 'seven@example.com'")).toHaveLength(0);
+    expect(admin('mix@example.com', 'Mix', 'abcdefgh').stderr).toMatch(/letters and numbers/);
     const noTarget = spawnSync('npx', ['tsx', 'scripts/create-admin.ts', '--email', 'a@example.com', '--name', 'A'], { cwd: root, input: `${PW}\n`, encoding: 'utf8' });
     expect(noTarget.status).toBe(2);
     expect(noTarget.stderr).toMatch(/exactly one of --remote/);
