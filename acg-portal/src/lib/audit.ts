@@ -18,7 +18,14 @@ export type AuditAction =
   | 'NOTIF_PREF_CHANGE'
   | 'DOCUMENT_DOWNLOAD'
   | 'IMPERSONATION_START'
-  | 'IMPERSONATION_END';
+  | 'IMPERSONATION_END'
+  | 'AUTH_MFA_CHALLENGE'
+  | 'AUTH_MFA_FAILED'
+  | 'AUTH_MFA_RECOVERY_USED'
+  | 'MFA_ENROLL_STARTED'
+  | 'MFA_ENABLED'
+  | 'MFA_DISABLED'
+  | 'MFA_RECOVERY_REGENERATED';
 
 export interface AuditInput {
   action: AuditAction;

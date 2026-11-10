@@ -24,7 +24,8 @@ export type IconName =
   | 'arrow-left'
   | 'log-out'
   | 'broadcast'
-  | 'lines';
+  | 'lines'
+  | 'lock';
 
 const PATHS: Record<IconName, { sw: number; body: React.ReactNode }> = {
   grid: {
@@ -66,6 +67,15 @@ const PATHS: Record<IconName, { sw: number; body: React.ReactNode }> = {
       <>
         <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
         <path d="M14 3v5h5" />
+      </>
+    ),
+  },
+  lock: {
+    sw: 1.7,
+    body: (
+      <>
+        <rect x="5" y="10.5" width="14" height="10" rx="2.2" />
+        <path d="M8.2 10.5V7.8a3.8 3.8 0 0 1 7.6 0v2.7" />
       </>
     ),
   },

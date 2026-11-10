@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
       return errorJson(result.error ?? 'Invalid email or password.', 401);
     }
 
+    if (result.mfaRequired) return json({ ok: true, redirectTo: '/login/mfa' });
     const redirectTo = result.user!.role === 'TEAM' ? '/console/overview' : '/portal/overview';
     return json({ ok: true, redirectTo });
   });

@@ -6,6 +6,8 @@ import { newId, type D1Database, type D1PreparedStatement } from '@/server/db/d1
 import { findSessionByTokenHash } from '@/server/db/repo';
 
 export const SESSION_COOKIE = 'acg_session';
+/** Pending second-factor challenge (not a session; grants nothing by itself). */
+export const MFA_CHALLENGE_COOKIE = 'acg_mfa';
 export const IMPERSONATE_COOKIE = 'acg_impersonate';
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
@@ -46,7 +48,7 @@ export function prepareSession(
   userId: string,
   meta: { ip?: string | null; userAgent?: string | null } = {},
   at = Date.now(),
-  guard?: { passwordHash: string },
+  guard?: { passwordHash: string; extraCondition?: string; extraParams?: unknown[] },
 ): NewSession {
   const token = randomBytes(32).toString('base64url');
   const tokenHash = sha256(token);
@@ -58,9 +60,10 @@ export function prepareSession(
           `INSERT INTO sessions (id, token_hash, user_id, expires_at, created_at, ip, user_agent)
            SELECT ?, ?, ?, ?, ?, ?, ?
            WHERE EXISTS (SELECT 1 FROM users WHERE id = ? AND password_hash = ?
-                         AND (locked_until IS NULL OR locked_until <= ?))`,
+                         AND (locked_until IS NULL OR locked_until <= ?))
+             AND ${guard.extraCondition ?? '1'}`,
         )
-        .bind(...values, userId, guard.passwordHash, at)
+        .bind(...values, userId, guard.passwordHash, at, ...(guard.extraParams ?? []))
     : database
         .prepare('INSERT INTO sessions (id, token_hash, user_id, expires_at, created_at, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .bind(...values);
@@ -71,6 +74,22 @@ export function prepareSession(
 export async function setSessionCookie(session: Pick<NewSession, 'token' | 'expiresAt'>): Promise<void> {
   const jar = await cookies();
   jar.set(SESSION_COOKIE, session.token, { ...baseCookieOptions(), expires: session.expiresAt });
+}
+
+/** Set the short-lived cookie that identifies a pending 2FA challenge. */
+export async function setMfaChallengeCookie(challenge: { token: string; expiresAt: Date }): Promise<void> {
+  const jar = await cookies();
+  jar.set(MFA_CHALLENGE_COOKIE, challenge.token, { ...baseCookieOptions(), sameSite: 'strict', expires: challenge.expiresAt });
+}
+
+export async function getMfaChallengeToken(): Promise<string | null> {
+  const jar = await cookies();
+  return jar.get(MFA_CHALLENGE_COOKIE)?.value ?? null;
+}
+
+export async function clearMfaChallengeCookie(): Promise<void> {
+  const jar = await cookies();
+  jar.delete(MFA_CHALLENGE_COOKIE);
 }
 
 /** Destroy the current session (cookie + DB row) and clear impersonation. */

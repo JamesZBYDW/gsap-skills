@@ -4,11 +4,13 @@ import { db } from '@/server/db/client';
 import type { D1Database } from '@/server/db/d1';
 import { findUserByEmail, investorExists, investorIdForUser } from '@/server/db/repo';
 import { verifyPassword } from './password';
+import { createChallenge, hasEnabledFactor } from '@/server/mfa';
 import {
   destroySession,
   getSessionUser,
   getImpersonatedInvestorId,
   prepareSession,
+  setMfaChallengeCookie,
   setSessionCookie,
   type SessionUser,
 } from './session';
@@ -34,6 +36,9 @@ export interface LoginResult {
   user?: SessionUser;
   /** Set on success; the caller sets the cookie (see setSessionCookie). */
   session?: { token: string; expiresAt: Date };
+  /** Password accepted but a second factor is required: no session yet. */
+  mfaRequired?: boolean;
+  mfaChallenge?: { token: string; expiresAt: Date };
 }
 
 // A well-formed hash of a random password, verified when the account does not
@@ -100,10 +105,17 @@ export async function finalizeLogin(
   meta: { ip: string | null; userAgent?: string | null },
   now = Date.now(),
 ): Promise<{ token: string; expiresAt: Date } | null> {
-  const guard = 'id = ? AND password_hash = ? AND (locked_until IS NULL OR locked_until <= ?)';
-  const session = prepareSession(database, userId, meta, now, { passwordHash: verifiedHash });
+  // A password alone never yields a session for an account with 2FA on —
+  // including one where 2FA was turned on while this login was in flight.
+  const noSecondFactor = 'NOT EXISTS (SELECT 1 FROM mfa_factors WHERE user_id = ? AND enabled_at IS NOT NULL)';
+  const guard = `id = ? AND password_hash = ? AND (locked_until IS NULL OR locked_until <= ?) AND ${noSecondFactor}`;
+  const session = prepareSession(database, userId, meta, now, {
+    passwordHash: verifiedHash,
+    extraCondition: noSecondFactor,
+    extraParams: [userId],
+  });
   const [, inserted] = await database.batch([
-    database.prepare(`UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE ${guard}`).bind(userId, verifiedHash, now),
+    database.prepare(`UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE ${guard}`).bind(userId, verifiedHash, now, userId),
     session.statement,
     auditStmtIf(
       database,
@@ -162,6 +174,16 @@ export async function attemptLogin(
     };
   }
 
+  // Second factor: a correct password only opens a short-lived challenge.
+  if (await hasEnabledFactor(database, user.id)) {
+    const challenge = await createChallenge(database, user.id, user.passwordHash, { ip, userAgent: params.userAgent });
+    if (!challenge) {
+      await audit(database, { action: 'AUTH_LOGIN_FAILED', actorUserId: user.id, ip, metadata: { reason: 'changed_during_login' } });
+      return { ok: false, error: generic };
+    }
+    return { ok: true, mfaRequired: true, mfaChallenge: challenge, user: { id: user.id, role: user.role, name: user.name, email: user.email, investorId: null, mustChangePassword: user.mustChangePassword } };
+  }
+
   const session = await finalizeLogin(database, user.id, user.passwordHash, { ip, userAgent: params.userAgent });
   if (!session) {
     // The account was locked or its credentials changed while the password
@@ -190,6 +212,7 @@ export async function attemptLogin(
 export async function login(params: Parameters<typeof attemptLogin>[0]): Promise<LoginResult> {
   const result = await attemptLogin(params);
   if (result.ok && result.session) await setSessionCookie(result.session);
+  if (result.ok && result.mfaChallenge) await setMfaChallengeCookie(result.mfaChallenge);
   return result;
 }
 

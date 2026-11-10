@@ -22,6 +22,7 @@ export async function getInvestorShell(
     { href: '/portal/overview', label: 'Overview', icon: 'grid' },
     { href: '/portal/documents', label: 'Documents', icon: 'file' },
     { href: '/portal/profile', label: 'Profile', icon: 'user' },
+    { href: '/portal/security', label: 'Security', icon: 'lock' },
   ];
 
   const footer: SidebarFooter = opts.impersonating
@@ -52,6 +53,7 @@ export async function getTeamShell(viewerName: string): Promise<TeamShell> {
     { href: '/console/overview', label: 'Overview', icon: 'grid' },
     { href: '/console/investors', label: 'Investors', icon: 'users' },
     { href: '/console/create', label: 'Create account', icon: 'user-plus' },
+    { href: '/console/security', label: 'Security', icon: 'lock' },
   ];
 
   const footer: SidebarFooter = {

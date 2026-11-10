@@ -1,0 +1,22 @@
+import { NextRequest } from 'next/server';
+import { z } from 'zod';
+import { handle, json, errorJson, clientIp } from '@/lib/http';
+import { mfaSettingsGuard } from '@/server/mfa-routes';
+import { mfaKeys } from '@/server/mfa-key';
+import { disableMfa } from '@/server/mfa';
+
+const schema = z.object({
+  password: z.string().min(1, 'Enter your password.').max(200),
+  code: z.string().trim().min(1, 'Enter a code.').max(40),
+});
+
+/** Turn 2FA off: requires the password AND a current code (or a recovery code). */
+export async function POST(req: NextRequest) {
+  return handle(async () => {
+    const { user, database } = await mfaSettingsGuard(req);
+    const parsed = schema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) return errorJson(parsed.error.issues[0]?.message ?? 'Invalid input.', 400);
+    await disableMfa(database, await mfaKeys(), user.id, parsed.data.password, parsed.data.code, clientIp(req));
+    return json({ ok: true });
+  });
+}
