@@ -189,7 +189,10 @@ Automated checks:
 npm run typecheck
 npm test            # unit + D1 integration (atomicity, races, rollback, lockout, throttle,
                     # CLI, scrypt in workerd) — uses throwaway local D1 copies
-E2E_BASE_URL=… npx playwright test   # the five browser workflows
+# Two local Workers with independently seeded D1 state directories keep the
+# sign-ins for each fixture within the production IP throttle (20 per 10 min).
+E2E_BASE_URL=http://localhost:8790 npm run test:e2e -- smoke.spec.ts documents.spec.ts email.spec.ts payments.spec.ts
+E2E_BASE_URL=http://localhost:8791 npm run test:e2e -- mfa.spec.ts
 ```
 
 ## Pre-launch checklist (compliance & security)
