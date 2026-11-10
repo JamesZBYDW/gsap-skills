@@ -30,26 +30,41 @@ function baseCookieOptions() {
 export interface NewSession {
   /** The opaque cookie value; only its SHA-256 hash is stored. */
   token: string;
+  tokenHash: string;
   expiresAt: Date;
-  /** INSERT for the session row, to include in the login batch. */
+  /** INSERT for the session row, to include in the caller's batch. */
   statement: D1PreparedStatement;
 }
 
-/** Prepare a DB-backed session for `userId` (written by the caller's batch). */
+/**
+ * Prepare a DB-backed session for `userId` (written by the caller's batch).
+ * With `guard`, the row is only inserted if, when the batch commits, the user
+ * still has that password hash and is not locked.
+ */
 export function prepareSession(
   database: D1Database,
   userId: string,
   meta: { ip?: string | null; userAgent?: string | null } = {},
   at = Date.now(),
+  guard?: { passwordHash: string },
 ): NewSession {
   const token = randomBytes(32).toString('base64url');
+  const tokenHash = sha256(token);
   const expiresAt = new Date(at + SESSION_TTL_MS);
-  const statement = database
-    .prepare(
-      'INSERT INTO sessions (id, token_hash, user_id, expires_at, created_at, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    )
-    .bind(newId(), sha256(token), userId, expiresAt.getTime(), at, meta.ip ?? null, meta.userAgent?.slice(0, 512) ?? null);
-  return { token, expiresAt, statement };
+  const values = [newId(), tokenHash, userId, expiresAt.getTime(), at, meta.ip ?? null, meta.userAgent?.slice(0, 512) ?? null];
+  const statement = guard
+    ? database
+        .prepare(
+          `INSERT INTO sessions (id, token_hash, user_id, expires_at, created_at, ip, user_agent)
+           SELECT ?, ?, ?, ?, ?, ?, ?
+           WHERE EXISTS (SELECT 1 FROM users WHERE id = ? AND password_hash = ?
+                         AND (locked_until IS NULL OR locked_until <= ?))`,
+        )
+        .bind(...values, userId, guard.passwordHash, at)
+    : database
+        .prepare('INSERT INTO sessions (id, token_hash, user_id, expires_at, created_at, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(...values);
+  return { token, tokenHash, expiresAt, statement };
 }
 
 /** Set the session cookie for a session whose row has been written. */

@@ -12,7 +12,7 @@ import {
   setSessionCookie,
   type SessionUser,
 } from './session';
-import { audit, auditStmt, auditStmtIf } from './audit';
+import { audit, auditStmtIf } from './audit';
 import { HttpError } from './http';
 import { LOGIN_MAX_ATTEMPTS, LOGIN_LOCKOUT_MS } from './ratelimit';
 
@@ -38,42 +38,82 @@ export interface LoginResult {
 
 // A well-formed hash of a random password, verified when the account does not
 // exist so the response time does not reveal which emails have accounts.
-const TIMING_DUMMY_HASH =
+export const TIMING_DUMMY_HASH =
   'scrypt$ln=15,r=8,p=3$q2Lh7mOYz1H3sTqv0Yh0Xw$7m2kq5nJm1o0W3Q8u0k5aYJ0ZQd3d9yq3n5H6t2y0aE';
 
 /**
- * Atomically count one failed attempt: increments the counter, locks the
- * account when it reaches LOGIN_MAX_ATTEMPTS (resetting the counter), and
- * writes AUTH_LOGIN_FAILED or AUTH_LOCKOUT — all in one batch, so concurrent
- * failures can neither lose an increment nor skip the lockout.
+ * Atomically count one failed attempt, but only if, when the batch commits,
+ * the account is still unlocked and still has the password hash the attempt
+ * was checked against. So an attempt that read the account before a lockout
+ * cannot clear or restart that lockout, and an attempt against an old
+ * password cannot count against new credentials. Reaching
+ * LOGIN_MAX_ATTEMPTS locks the account and resets the counter. Exactly one
+ * audit record is written per attempt, in the same batch:
+ * AUTH_LOCKOUT when this attempt locked the account, otherwise
+ * AUTH_LOGIN_FAILED (with reason "not_counted" when the guard skipped it).
  */
-export async function recordFailedLogin(database: D1Database, userId: string, ip: string | null, now = Date.now()) {
+export async function recordFailedLogin(
+  database: D1Database,
+  userId: string,
+  checkedHash: string,
+  ip: string | null,
+  now = Date.now(),
+) {
   const lockedUntil = now + LOGIN_LOCKOUT_MS;
-  const max = LOGIN_MAX_ATTEMPTS;
   await database.batch([
     database
       .prepare(
         `UPDATE users SET
            failed_login_attempts = CASE WHEN failed_login_attempts + 1 >= ?1 THEN 0 ELSE failed_login_attempts + 1 END,
            locked_until = CASE WHEN failed_login_attempts + 1 >= ?1 THEN ?2 ELSE NULL END
-         WHERE id = ?3`,
+         WHERE id = ?3 AND password_hash = ?4 AND (locked_until IS NULL OR locked_until <= ?5)`,
       )
-      .bind(max, lockedUntil, userId),
+      .bind(LOGIN_MAX_ATTEMPTS, lockedUntil, userId, checkedHash, now),
+    // changes() is the row count of the UPDATE just above (same transaction).
+    database
+      .prepare(
+        `INSERT INTO audit_logs (id, actor_user_id, action, target_type, target_id, metadata, ip, created_at)
+         SELECT ?1, ?2,
+                CASE WHEN changes() = 1 AND locked_until = ?3 THEN 'AUTH_LOCKOUT' ELSE 'AUTH_LOGIN_FAILED' END,
+                NULL, NULL,
+                CASE WHEN changes() = 0 THEN json_object('reason', 'not_counted')
+                     WHEN locked_until = ?3 THEN json_object('attempts', ?4)
+                     ELSE json_object('reason', 'password', 'attempts', failed_login_attempts) END,
+                ?5, ?6
+         FROM users WHERE id = ?2`,
+      )
+      .bind(crypto.randomUUID(), userId, lockedUntil, LOGIN_MAX_ATTEMPTS, ip, now),
+  ]);
+}
+
+/**
+ * Finish a login whose password was verified against `verifiedHash`. The
+ * counter reset, the session row and the AUTH_LOGIN record are one batch,
+ * and each is gated on the account still having that hash and not being
+ * locked at commit time — a lockout or credential reset that lands while the
+ * password was being checked wins, and no session (or cookie) is issued.
+ */
+export async function finalizeLogin(
+  database: D1Database,
+  userId: string,
+  verifiedHash: string,
+  meta: { ip: string | null; userAgent?: string | null },
+  now = Date.now(),
+): Promise<{ token: string; expiresAt: Date } | null> {
+  const guard = 'id = ? AND password_hash = ? AND (locked_until IS NULL OR locked_until <= ?)';
+  const session = prepareSession(database, userId, meta, now, { passwordHash: verifiedHash });
+  const [, inserted] = await database.batch([
+    database.prepare(`UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE ${guard}`).bind(userId, verifiedHash, now),
+    session.statement,
     auditStmtIf(
       database,
-      { action: 'AUTH_LOCKOUT', actorUserId: userId, ip, metadata: { attempts: max } },
-      '(SELECT locked_until FROM users WHERE id = ?) = ?',
-      [userId, lockedUntil],
-      now,
-    ),
-    auditStmtIf(
-      database,
-      { action: 'AUTH_LOGIN_FAILED', actorUserId: userId, ip, metadata: { reason: 'password' } },
-      '(SELECT locked_until FROM users WHERE id = ?) IS NULL',
-      [userId],
+      { action: 'AUTH_LOGIN', actorUserId: userId, ip: meta.ip },
+      'EXISTS (SELECT 1 FROM sessions WHERE token_hash = ?)',
+      [session.tokenHash],
       now,
     ),
   ]);
+  return inserted?.meta.changes === 1 ? { token: session.token, expiresAt: session.expiresAt } : null;
 }
 
 /**
@@ -92,20 +132,21 @@ export async function attemptLogin(
 ): Promise<LoginResult> {
   const email = params.email.trim().toLowerCase();
   const generic = 'Invalid email or password.';
+  const locked = 'Account temporarily locked. Try again later or reset your password.';
   const ip = params.ip ?? null;
 
   const user = await findUserByEmail(database, email);
 
   if (user?.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
     await audit(database, { action: 'AUTH_LOGIN_FAILED', actorUserId: user.id, ip, metadata: { reason: 'locked' } });
-    return { ok: false, error: 'Account temporarily locked. Try again later or reset your password.' };
+    return { ok: false, error: locked };
   }
 
   // Always run a verification to keep timing roughly constant.
   const valid = await verifyPassword(user?.passwordHash ?? TIMING_DUMMY_HASH, params.password);
 
   if (!user || !valid) {
-    if (user) await recordFailedLogin(database, user.id, ip);
+    if (user) await recordFailedLogin(database, user.id, user.passwordHash, ip);
     return { ok: false, error: generic };
   }
 
@@ -121,13 +162,13 @@ export async function attemptLogin(
     };
   }
 
-  const at = Date.now();
-  const session = prepareSession(database, user.id, { ip, userAgent: params.userAgent }, at);
-  await database.batch([
-    database.prepare('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?').bind(user.id),
-    session.statement,
-    auditStmt(database, { action: 'AUTH_LOGIN', actorUserId: user.id, ip }, at),
-  ]);
+  const session = await finalizeLogin(database, user.id, user.passwordHash, { ip, userAgent: params.userAgent });
+  if (!session) {
+    // The account was locked or its credentials changed while the password
+    // was being checked. No session was created.
+    await audit(database, { action: 'AUTH_LOGIN_FAILED', actorUserId: user.id, ip, metadata: { reason: 'changed_during_login' } });
+    return { ok: false, error: generic };
+  }
 
   const investorId = user.role === 'INVESTOR' ? await investorIdForUser(database, user.id) : null;
 
@@ -141,7 +182,7 @@ export async function attemptLogin(
       investorId,
       mustChangePassword: user.mustChangePassword,
     },
-    session: { token: session.token, expiresAt: session.expiresAt },
+    session,
   };
 }
 

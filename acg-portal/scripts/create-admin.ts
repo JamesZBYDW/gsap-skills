@@ -1,8 +1,8 @@
 /* eslint-disable no-console */
 // Create (or reset the password of) a Team Console login, without seeding.
 //
-//   npm run admin:create -- --remote --email james@acgroupinc.com --name "James"
-//   npm run admin:create -- --local  --email james@acgroupinc.com --name "James"
+//   npm run admin:create -- --remote --email <admin@example.com> --name "<Full Name>"
+//   npm run admin:create -- --local  --email <admin@example.com> --name "<Full Name>"
 //
 // The password is read from the terminal with echo off (or from stdin when it
 // is piped, for automation) and is never printed, logged, written to disk or
@@ -33,6 +33,11 @@ function argValue(flag: string): string | undefined {
 const remote = process.argv.includes('--remote');
 const local = process.argv.includes('--local');
 if (remote === local) fail('pass exactly one of --remote (production D1) or --local.', 2);
+
+// Local only: point at a specific local D1 state directory (tests).
+const persistTo = argValue('--persist-to');
+if (persistTo && remote) fail('--persist-to only applies to --local.', 2);
+const persistArgs = persistTo ? ['--persist-to', persistTo] : [];
 
 const email = (argValue('--email') ?? '').trim().toLowerCase();
 const name = (argValue('--name') ?? '').trim();
@@ -89,7 +94,7 @@ const lit = (v: string | number | null) => (v === null ? 'NULL' : typeof v === '
 function d1(command: string, json = false): string {
   const r = spawnSync(
     'npx',
-    ['wrangler', 'd1', 'execute', DB_NAME, remote ? '--remote' : '--local', ...(json ? ['--json'] : []), '--command', command],
+    ['wrangler', 'd1', 'execute', DB_NAME, remote ? '--remote' : '--local', ...persistArgs, ...(json ? ['--json'] : []), '--command', command],
     { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' },
   );
   if (r.status !== 0) fail('wrangler d1 execute failed (check `wrangler login` and the database name).');
@@ -118,7 +123,8 @@ async function main() {
      ON CONFLICT (email) DO UPDATE SET name = excluded.name, password_hash = excluded.password_hash,
        failed_login_attempts = 0, locked_until = NULL, must_change_password = 0, updated_at = excluded.updated_at
      WHERE users.role = 'TEAM'`,
-    `DELETE FROM sessions WHERE user_id = (SELECT id FROM users WHERE email = ${lit(email)} AND role = 'TEAM' AND password_hash = ${lit(hash)}) AND created_at < ${now}`,
+    // Every session of that login ends, including any opened while this ran.
+    `DELETE FROM sessions WHERE user_id = (SELECT id FROM users WHERE email = ${lit(email)} AND role = 'TEAM' AND password_hash = ${lit(hash)})`,
     `INSERT INTO audit_logs (id, actor_user_id, action, target_type, target_id, metadata, ip, created_at)
      SELECT ${lit(randomUUID())}, NULL, 'ADMIN_BOOTSTRAP', 'User', id, json_object('via', 'cli'), NULL, ${now}
      FROM users WHERE email = ${lit(email)} AND role = 'TEAM' AND password_hash = ${lit(hash)}`,

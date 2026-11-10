@@ -173,11 +173,12 @@ export async function setNoteTerms(
 
 /**
  * Statements that give an investor a login (new user) or reset the existing
- * one. Both branches are written so the batch is correct whatever the state is
- * when it commits: the INSERT and the link only apply if the investor still
- * has no login; the UPDATE then applies to whichever login is linked. A login
- * email already used by another account violates `users.email` UNIQUE and
- * rolls back the whole batch.
+ * one, revoking that login's existing sessions. Both branches are written so
+ * the batch is correct whatever the state is when it commits: the INSERT and
+ * the link only apply if the investor still has no login; the UPDATE and the
+ * session revocation then apply to whichever login is linked. A login email
+ * already used by another account violates `users.email` UNIQUE and rolls
+ * back the whole batch.
  */
 export function credentialStatements(
   database: D1Database,
@@ -211,6 +212,8 @@ export function credentialStatements(
          WHERE id = (SELECT user_id FROM investors WHERE id = ?)`,
       )
       .bind(creds.loginEmail, creds.passwordHash, must, at, investorId),
+    // New credentials end every existing session of that login.
+    database.prepare('DELETE FROM sessions WHERE user_id = (SELECT user_id FROM investors WHERE id = ?)').bind(investorId),
     auditStmt(
       database,
       { action: 'CREDENTIALS_SET', actorUserId, targetType: 'Investor', targetId: investorId, metadata: { email: creds.loginEmail }, ip },
@@ -395,8 +398,8 @@ export async function changeOwnPassword(
     auditStmtIf(
       database,
       { action: 'PASSWORD_CHANGE', actorUserId: userId, targetType: 'User', targetId: userId, ip },
-      '(SELECT password_hash FROM users WHERE id = ?) = ?',
-      [userId, newHash],
+      'changes() = 1',
+      [],
       at,
     ),
   ]);
@@ -405,28 +408,43 @@ export async function changeOwnPassword(
 
 /**
  * Forced first-login password set. The authenticated session proves identity,
- * so no current password is required — but it only works while the account is
- * still flagged mustChangePassword, checked atomically in the UPDATE.
+ * so no current password is required — but it only applies while the account
+ * still has the management-issued password this request read (hash AND
+ * mustChangePassword checked in the UPDATE), so an in-flight request cannot
+ * overwrite credentials management reset in the meantime.
  */
 export async function setInitialPassword(userId: string, newPassword: string, ip: string | null, database: D1Database = db()) {
   const user = await findUserById(database, userId);
   if (!user) throw new HttpError(401, 'Not authenticated.');
   if (!user.mustChangePassword) throw new HttpError(400, 'Password has already been set.');
   const newHash = await hashPassword(newPassword);
-  const at = Date.now();
-  const [update] = await database.batch([
+  const [update] = await database.batch(initialPasswordStatements(database, userId, user.passwordHash, newHash, ip));
+  if (!update?.meta.changes) throw new HttpError(409, 'Your sign-in details changed. Please sign in again.');
+}
+
+export function initialPasswordStatements(
+  database: D1Database,
+  userId: string,
+  issuedHash: string,
+  newHash: string,
+  ip: string | null,
+  at = Date.now(),
+): D1PreparedStatement[] {
+  return [
     database
-      .prepare('UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE id = ? AND must_change_password = 1')
-      .bind(newHash, at, userId),
+      .prepare(
+        `UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ?
+         WHERE id = ? AND must_change_password = 1 AND password_hash = ?`,
+      )
+      .bind(newHash, at, userId, issuedHash),
     auditStmtIf(
       database,
       { action: 'PASSWORD_CHANGE', actorUserId: userId, targetType: 'User', targetId: userId, metadata: { initial: true }, ip },
-      '(SELECT password_hash FROM users WHERE id = ?) = ?',
-      [userId, newHash],
+      'changes() = 1',
+      [],
       at,
     ),
-  ]);
-  if (!update?.meta.changes) throw new HttpError(400, 'Password has already been set.');
+  ];
 }
 
 // ─── Notification preferences ───────────────────────────────────────────────
