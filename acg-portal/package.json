@@ -1,0 +1,48 @@
+{
+  "name": "acg-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ACG Investor Portal & Team Console — private two-sided portal for Amsterdam Capital Group (Cloudflare Workers + D1).",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "build:worker": "opennextjs-cloudflare build",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "lint": "next lint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "db:migrate:local": "wrangler d1 migrations apply acg-portal-production --local",
+    "db:migrate:remote": "wrangler d1 migrations apply acg-portal-production --remote",
+    "db:seed:local": "tsx scripts/seed-local.ts",
+    "admin:create": "tsx scripts/create-admin.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@opennextjs/cloudflare": "1.20.14",
+    "next": "15.5.28",
+    "qrcode": "1.5.4",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "server-only": "0.0.1",
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/node": "22.10.7",
+    "@types/qrcode": "1.5.5",
+    "@types/react": "19.0.7",
+    "@types/react-dom": "19.0.3",
+    "eslint": "9.18.0",
+    "eslint-config-next": "15.5.28",
+    "tsx": "4.19.2",
+    "typescript": "5.7.3",
+    "vitest": "2.1.8",
+    "wrangler": "4.153.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

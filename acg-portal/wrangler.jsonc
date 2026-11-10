@@ -1,0 +1,37 @@
+// ACG Investor Portal — Cloudflare Workers (OpenNext) + D1.
+// Signing and encryption secrets are Worker secrets set with
+// `wrangler secret put` — never in this file. Runbook: DEPLOY.md
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "acg-portal",
+  "account_id": "983099337aea87f2c4470be788687a81",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-20",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+
+  // Served only on the custom domain; no workers.dev or preview URLs.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "portal.acgroupinc.com", "custom_domain": true }],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "acg-portal-production",
+      "database_id": "f105d819-33be-4a1e-a165-1351d135b316",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "acg-portal-documents-production" }],
+  "send_email": [{ "name": "ACG_EMAIL", "allowed_sender_addresses": ["notifications@notify.portal.acgroupinc.com"] }],
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    "EMAIL_FROM": "notifications@notify.portal.acgroupinc.com",
+    "APP_URL": "https://portal.acgroupinc.com"
+  },
+
+  "observability": { "enabled": true, "redact_query_string": true }
+}
