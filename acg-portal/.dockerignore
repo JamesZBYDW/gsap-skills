@@ -2,7 +2,8 @@ node_modules
 .next
 .git
 .env
-.env*.local
+.env.*
+!.env.example
 .prisma-engines
 .scratch
 tests-e2e/.auth

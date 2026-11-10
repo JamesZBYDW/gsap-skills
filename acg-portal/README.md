@@ -179,5 +179,7 @@ prisma/                       schema + migrations + seed
 - Copy honors the brief: "ACG Promissory Note," "fixed for the term — not
   guaranteed."
 
-See **`DEPLOY.md`** for production deployment, secrets, migrations, backups, and
-a pre-launch compliance checklist.
+See **`CLOUDFLARE_DEPLOY.md`** to put it on ACG's domain behind Cloudflare,
+**`STAGING_DEPLOY.md`** for a staging copy, and **`DEPLOY.md`** for other hosts,
+secrets, migrations, backups, and the pre-launch compliance checklist. Coding
+agents: start with **`AGENTS.md`**.

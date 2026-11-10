@@ -31,8 +31,19 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
   }
 }
 
-/** Best-effort client IP from common proxy headers. */
+/**
+ * Best-effort client IP from common proxy headers.
+ *
+ * Behind Cloudflare, `CF-Connecting-IP` is the one header the edge always
+ * overwrites with the real visitor address; `X-Forwarded-For` is only appended
+ * to, so its first entry is whatever the client sent. Prefer the former so the
+ * login rate limit and audit log can't be dodged with a forged header. This
+ * assumes the origin is reachable only through the proxy (see
+ * CLOUDFLARE_DEPLOY.md — the tunnel setup publishes no ports).
+ */
 export function clientIp(req: Request): string | null {
+  const cf = req.headers.get('cf-connecting-ip');
+  if (cf) return cf.trim();
   const xff = req.headers.get('x-forwarded-for');
   if (xff) return xff.split(',')[0]!.trim();
   return req.headers.get('x-real-ip');

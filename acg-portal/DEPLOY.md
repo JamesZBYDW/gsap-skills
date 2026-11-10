@@ -5,6 +5,11 @@ regulated: HTTPS only, secrets in a manager (never in git), encrypted database
 with backups, audit retention, and a counsel review of all investor-facing copy
 and terms before launch.
 
+> **Deploying on ACG's domain with Cloudflare?** Use `CLOUDFLARE_DEPLOY.md` — a
+> step-by-step runbook for the Docker + Cloudflare Tunnel setup, including how to
+> create the first management login without seeding. This file is the general
+> reference and compliance checklist.
+
 ## What you need
 
 - A **PostgreSQL 14+** database (managed: Neon, RDS, Cloud SQL, Supabase).
