@@ -23,10 +23,18 @@
   .hoverAccBorder:hover{border-color:#0071e3 !important}
   .banner{background:#12326a;color:#cdd9f0;font-size:.78rem;text-align:center;padding:7px 16px;font-weight:600}
   .banner b{color:#fff}
+  [hidden]{display:none!important}
+  .demo-page{padding:26px 34px;max-width:760px}
+  .demo-card{background:white;color:#0c1f3d;border:1px solid #0c1f3d17;border-radius:16px;padding:18px 20px;display:grid;gap:10px;font-size:.86rem}
+  .demo-card h3{font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;color:#95733f}
+  .demo-card input,.demo-card select,.demo-field{display:block;width:100%;padding:9px 12px;background:white;color:#0c1f3d;border:1px solid #c7ccd6;border-radius:8px}
+  .demo-btn{background:#edf2fa;color:#144d94;border-radius:8px;font-size:.82rem;font-weight:700;padding:8px 12px;margin:4px}
+  .demo-overlay{position:fixed;inset:0;z-index:20;background:#091b3399;display:grid;place-items:center;padding:20px}
+  .demo-overlay .demo-card{width:min(480px,100%);max-height:80vh;overflow:auto}
 </style>
 </head>
 <body>
-<div class="banner">Interactive UI prototype · in-memory demo data (resets on refresh) · the deployed app adds a real backend, auth &amp; database. Pick a role to sign in — credentials are prefilled.</div>
+<div class="banner">Offline walkthrough · Use sample data only. Email, private PDF storage and authenticator codes are simulated. Refresh to reset.</div>
 <div id="app"></div>
 <script>
 "use strict";
@@ -36,26 +44,24 @@ const MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec
 const MOF=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 // ---- seed / schedule ----
-function sched(){const out=[];const wire=Date.UTC(2025,3,14);for(let i=0;i<24;i++){const d=new Date(wire+(i+1)*30*86400000);const status=i<14?'paid':(i===14?'next':'upcoming');out.push({n:i+1,date:MO[d.getUTCMonth()]+' '+d.getUTCDate()+', '+d.getUTCFullYear(),amount:i===23?'$253,750':'$3,750',status});}return out;}
-const SCHED=sched();
-
+const DEMO_DAY='2026-06-30', DAY=86400000;
 const state={
   auth:false, role:'investor',
   mode:'investor', iv:'overview', tv:'overview',
   detail:null, compose:null, toast:'',
   search:'', filter:'All',
-  toggles:{posted:true,maturity:true},
+  viewer:'i1', posts:[], mail:[], inbox:false, authFlow:'', openLink:null, mfa:{},
   ca:{type:'Individual', requirePw:true, phone:'', principal:'', rate:'', term:'24', wire:''},
   mn:{principal:'', rate:'', term:'24', wire:''},
   investors:[
-    {id:'i1',name:'Margaret Vance',type:'Individual',state:'Active',principal:'$250,000',rate:'18%',term:'24 mo',email:'m.vance@gmail.com',phone:'(212) 555·0148',bank:'Chase',last4:'6042',method:'ACH · monthly',wire:'Apr 14, 2025',maturity:'Apr 14, 2027',hasLogin:true},
-    {id:'i2',name:'Vance Family Office',type:'Entity',state:'Active',principal:'$1,200,000',rate:'18%',term:'24 mo',email:'ops@vancefo.com',wire:'May 2, 2025',maturity:'May 2, 2027'},
-    {id:'i3',name:'Harold & Anne Beckett',type:'Individual',state:'Active',principal:'$500,000',rate:'20%',term:'36 mo',email:'beckett@me.com',wire:'Jul 21, 2023',maturity:'Jul 21, 2026'},
-    {id:'i4',name:'Crest Harbor Holdings',type:'Entity',state:'Awaiting',principal:'$750,000',rate:'15%',term:'18 mo',email:'admin@crestharbor.com',wire:'—',maturity:'—'},
-    {id:'i5',name:'Dr. Lena Okafor',type:'Individual',state:'Active',principal:'$300,000',rate:'18%',term:'24 mo',email:'l.okafor@clinic.org',wire:'Sep 12, 2024',maturity:'Sep 12, 2026'},
-    {id:'i6',name:'Theodore Ramsey',type:'Individual',state:'Pending',principal:'$150,000',rate:'12%',term:'12 mo',email:'t.ramsey@outlook.com',wire:'—',maturity:'—'},
-    {id:'i7',name:'Juniper Trust',type:'Entity',state:'Active',principal:'$2,000,000',rate:'20%',term:'36 mo',email:'trustee@junipertrust.org',wire:'Sep 28, 2023',maturity:'Sep 28, 2026'},
-    {id:'i8',name:'Marcus Bell',type:'Individual',state:'Declined',principal:'—',rate:'—',term:'—',email:'mbell@gmail.com',wire:'—',maturity:'—'}
+    {id:'i1',name:'Margaret Vance',type:'Individual',state:'Active',principal:'$250,000',rate:'18%',term:'24 mo',email:'margaret@example.test',phone:'(212) 555·0148',bank:'Chase',last4:'6042',method:'ACH · monthly',wire:'Apr 14, 2025',maturity:'Apr 14, 2027',hasLogin:true},
+    {id:'i2',name:'Vance Family Office',type:'Entity',state:'Active',principal:'$1,200,000',rate:'18%',term:'24 mo',email:'office@example.test',wire:'May 2, 2025',maturity:'May 2, 2027'},
+    {id:'i3',name:'Harold & Anne Beckett',type:'Individual',state:'Active',principal:'$500,000',rate:'20%',term:'36 mo',email:'beckett@example.test',wire:'Jul 21, 2023',maturity:'Jul 21, 2026'},
+    {id:'i4',name:'Crest Harbor Holdings',type:'Entity',state:'Awaiting',principal:'$750,000',rate:'15%',term:'18 mo',email:'crest@example.test',wire:'—',maturity:'—'},
+    {id:'i5',name:'Dr. Lena Okafor',type:'Individual',state:'Active',principal:'$300,000',rate:'18%',term:'24 mo',email:'lena@example.test',wire:'Sep 12, 2024',maturity:'Sep 12, 2026',hasLogin:true},
+    {id:'i6',name:'Theodore Ramsey',type:'Individual',state:'Pending',principal:'$150,000',rate:'12%',term:'12 mo',email:'theodore@example.test',wire:'—',maturity:'—'},
+    {id:'i7',name:'Juniper Trust',type:'Entity',state:'Active',principal:'$2,000,000',rate:'20%',term:'36 mo',email:'juniper@example.test',wire:'Sep 28, 2023',maturity:'Sep 28, 2026'},
+    {id:'i8',name:'Marcus Bell',type:'Individual',state:'Declined',principal:'—',rate:'—',term:'—',email:'marcus@example.test',wire:'—',maturity:'—'}
   ],
   documents:[]
 };
@@ -90,13 +96,13 @@ const SVG={
   lines:'<path d="M3 6h18M3 12h18M3 18h12"></path>'
 };
 function ic(n,o){o=o||{};const sz=o.size||18,sw=o.sw||1.7,c=o.color||'currentColor';return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="'+c+'" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round">'+SVG[n]+'</svg>';}
-function toast(msg){state.toast=msg;render();clearTimeout(toast._t);toast._t=setTimeout(function(){state.toast='';render();},2600);}
+function toast(msg){state.toast=msg;render();clearTimeout(toast._t);toast._t=setTimeout(function(){state.toast='';document.getElementById('demo-toast')?.remove();},2600);}
 function scrollMsgs(){setTimeout(function(){document.querySelectorAll('[data-msglist]').forEach(function(el){el.scrollTop=el.scrollHeight;});},30);}
 function addMonths(n){const d=new Date(Date.UTC(2026,5,30));d.setUTCMonth(d.getUTCMonth()+(n||24));return MO[d.getUTCMonth()]+' '+d.getUTCDate()+', '+d.getUTCFullYear();}
 const uid=()=>'r'+Math.random().toString(36).slice(2,7);
 // ---- note-term computation ----
 function toNum(s){var n=parseFloat(String(s==null?'':s).replace(/[^0-9.]/g,''));return isFinite(n)?n:NaN;}
-function fmtMoney(n){return '$'+Math.round(n).toLocaleString('en-US');}
+function fmtMoney(n){return n.toLocaleString('en-US',{style:'currency',currency:'USD',minimumFractionDigits:Number.isInteger(n)?0:2,maximumFractionDigits:2});}
 function calcAmount(principal,rate){var p=toNum(principal),r=toNum(rate);if(!(p>0)||!(r>0))return '—';return fmtMoney(p*(r/100)/12);}
 function calcMaturity(wireISO,termMonths){var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(wireISO||''));if(!m)return '—';var y=+m[1],mo=+m[2]-1,d=+m[3];var months=parseInt(termMonths,10)||0;var total=mo+months,ny=y+Math.floor(total/12),nm=((total%12)+12)%12;var dim=new Date(Date.UTC(ny,nm+1,0)).getUTCDate();return MOF[nm]+' '+Math.min(d,dim)+', '+ny;}
 function calcFirst(wireISO){var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(wireISO||''));if(!m)return '—';var d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3])+30*86400000);return MOF[d.getUTCMonth()]+' '+d.getUTCDate()+', '+d.getUTCFullYear();}
@@ -117,11 +123,12 @@ function gateView(){
   inner='<div style="font-size:1.32rem;font-weight:800;color:#fff;text-align:center">Sign in</div>'
     +'<div style="font-size:.82rem;color:#9fb0cc;text-align:center;margin-top:4px">Private investor portal &amp; team console</div>'
     +'<div style="display:flex;gap:4px;background:rgba(255,255,255,.06);border-radius:11px;padding:4px;margin-top:22px">'+seg(state.role==='investor','Investor','roleInv')+seg(state.role==='team','Investor Relations','roleTeam')+'</div>'
-    +'<div style="margin-top:18px">'+fld('EMAIL','le',null,state.role==='team'?'james@acg.example':'m.vance@gmail.com').replace('margin-top:14px','')+'</div>'
+    +'<div style="margin-top:18px">'+fld('EMAIL','le',null,state.role==='team'?'team@example.test':viewer().email).replace('margin-top:14px','')+'</div>'
     +fld('PASSWORD','lp','password','demo1234')
     +'<button data-act="signIn" style="width:100%;margin-top:22px;padding:13px;border-radius:11px;background:#0071e3;color:#fff;font-size:.92rem;font-weight:700">Sign in</button>'
-    +'<div style="margin-top:18px;font-size:.76rem;color:#9fb0cc;line-height:1.5;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:11px;padding:12px 14px">Access is by invitation. Investor Relations creates your account and provides your initial email &amp; password — you\'ll set your own password on first sign-in.</div>'
-    +'<div style="text-align:center;margin-top:14px;font-size:.7rem;color:#6c7a93">Demo · credentials are prefilled — pick a role and sign in.</div>';
+    +'<div style="margin-top:18px;font-size:.76rem;color:#9fb0cc;line-height:1.5;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:11px;padding:12px 14px">Investor Relations provides your login or emails a link to set your password.</div>'
+    +'<div style="text-align:center;margin-top:14px;font-size:.7rem;color:#6c7a93">Demo credentials are prefilled.</div>'+demoButton('forgot','Forgot password?')+demoButton('inbox','Demo inbox');
+  if(state.authFlow)inner=authStep();
   return '<div style="min-height:calc(100vh - 34px);display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(1100px 600px at 50% -8%,rgba(0,113,227,.18),transparent),#0b1d3a">'
     +'<div style="width:424px;max-width:94vw"><div style="text-align:center;margin-bottom:24px"><img src="'+LOGO_CREAM+'" alt="ACG" style="height:34px;width:auto;display:inline-block"><div style="margin-top:12px;font-size:.62rem;font-weight:700;letter-spacing:.24em;color:#c8a878">AMSTERDAM CAPITAL GROUP</div></div>'
     +'<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:30px 30px 26px">'+inner+'</div></div></div>';
@@ -129,56 +136,63 @@ function gateView(){
 
 function sidebar(){
   const inv=state.mode==='investor';
-  const nav=inv?[['overview','Overview','grid'],['documents','Documents','file'],['profile','Profile','user']]
-    :[['overview','Overview','grid'],['investors','Investors','users'],['create','Create account','userplus']];
+  const nav=inv?[['overview','Overview','grid'],['documents','Documents','file'],['profile','Profile','user'],['security','Security','user']]
+    :[['overview','Overview','grid'],['investors','Investors','users'],['create','Create account','userplus'],['security','Security','user']];
   const cur=inv?state.iv:state.tv;
   const items=nav.map(function(n){return '<a class="hoverNav" data-act="go" data-view="'+n[0]+'" style="'+ns(cur===n[0])+'">'+ic(n[2])+n[1]+'</a>';}).join('');
   const foot=inv
-    ?'<div style="display:flex;align-items:center;gap:11px;padding:11px 8px;border-top:1px solid rgba(255,255,255,.09)"><div style="width:34px;height:34px;border-radius:50%;flex:none;background:linear-gradient(135deg,#cdaf7e,#a87e45);display:flex;align-items:center;justify-content:center;color:#1a1205;font-weight:800;font-size:.74rem">MV</div><div style="min-width:0"><div style="font-size:.82rem;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Margaret Vance</div><div style="font-size:.68rem;color:#8b97b0">Investor account</div></div></div><button class="hoverAccBorder" data-act="goTeam" style="width:100%;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:8px;padding:9px;border-radius:9px;font-size:.76rem;font-weight:600;color:#9fabc4;border:1px solid rgba(255,255,255,.12)">Open team console'+ic('arrowr',{size:14,sw:2})+'</button>'
-    :'<div style="display:flex;align-items:center;gap:11px;padding:11px 8px;border-top:1px solid rgba(255,255,255,.09)"><div style="width:34px;height:34px;border-radius:50%;flex:none;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#c8a878;font-weight:800;font-size:.7rem">IR</div><div style="min-width:0"><div style="font-size:.82rem;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Investor Relations</div><div style="font-size:.68rem;color:#8b97b0">James · Admin</div></div></div><button class="hoverAccBorder" data-act="goInvestor" style="width:100%;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:8px;padding:9px;border-radius:9px;font-size:.76rem;font-weight:600;color:#9fabc4;border:1px solid rgba(255,255,255,.12)">'+ic('arrowl',{size:14,sw:2})+'Back to investor view</button>';
+    ?'<div style="display:flex;align-items:center;gap:11px;padding:11px 8px;border-top:1px solid rgba(255,255,255,.09)"><div style="width:34px;height:34px;border-radius:50%;flex:none;background:linear-gradient(135deg,#cdaf7e,#a87e45);display:flex;align-items:center;justify-content:center;color:#1a1205;font-weight:800;font-size:.74rem">'+esc(ti(viewer().name))+'</div><div style="min-width:0"><div style="font-size:.82rem;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(viewer().name)+'</div><div style="font-size:.68rem;color:#8b97b0">Investor account</div></div></div><button class="hoverAccBorder" data-act="goTeam" style="width:100%;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:8px;padding:9px;border-radius:9px;font-size:.76rem;font-weight:600;color:#9fabc4;border:1px solid rgba(255,255,255,.12)">Open team console'+ic('arrowr',{size:14,sw:2})+'</button>'
+    :'<div style="display:flex;align-items:center;gap:11px;padding:11px 8px;border-top:1px solid rgba(255,255,255,.09)"><div style="width:34px;height:34px;border-radius:50%;flex:none;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#c8a878;font-weight:800;font-size:.7rem">IR</div><div style="min-width:0"><div style="font-size:.82rem;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Investor Relations</div><div style="font-size:.68rem;color:#8b97b0">Demo administrator</div></div></div><button class="hoverAccBorder" data-act="goInvestor" style="width:100%;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:8px;padding:9px;border-radius:9px;font-size:.76rem;font-weight:600;color:#9fabc4;border:1px solid rgba(255,255,255,.12)">'+ic('arrowl',{size:14,sw:2})+'Back to investor view</button>';
   return '<aside style="width:248px;flex:none;background:#0b1d3a;color:#e8edf6;display:flex;flex-direction:column;padding:24px 16px 16px;border-right:1px solid rgba(255,255,255,.06)"><div style="padding:4px 8px 22px"><img src="'+LOGO_CREAM+'" alt="ACG" style="height:26px;width:auto;display:block"><div style="margin-top:9px;font-size:.6rem;font-weight:700;letter-spacing:.22em;color:#c8a878">'+(inv?'INVESTOR PORTAL':'TEAM CONSOLE')+'</div></div><nav style="display:flex;flex-direction:column;gap:3px">'+items+'</nav><div style="flex:1"></div><div>'+foot+'</div></aside>';
 }
 
 function topbar(){
   const inv=state.mode==='investor';
-  const titles=inv?{overview:['OVERVIEW','Good morning, Margaret'],documents:['DOCUMENTS','Documents'],profile:['PROFILE','Account & profile']}
-    :{overview:['CONSOLE','Portfolio overview'],investors:['INVESTORS','Investors'],create:['CREATE ACCOUNT','Create account']};
+  const titles=inv?{overview:['OVERVIEW','Good morning, '+esc(viewer().name.split(' ')[0])],documents:['DOCUMENTS','Documents'],profile:['PROFILE','Account & profile'],security:['SECURITY','Security settings']}
+    :{overview:['CONSOLE','Portfolio overview'],investors:['INVESTORS','Investors'],create:['CREATE ACCOUNT','Create account'],security:['SECURITY','Security settings']};
   const t=titles[inv?state.iv:state.tv]||titles.overview;
-  const right=inv?'<span style="display:inline-flex;align-items:center;gap:7px;font-size:.76rem;font-weight:600;color:#1f8a5b;background:rgba(31,138,91,.1);padding:6px 13px;border-radius:999px"><span style="width:7px;height:7px;border-radius:50%;background:#1f8a5b"></span>Note active</span>':'<div style="font-size:.78rem;color:#8b93a3;font-weight:500">Tuesday · Jun 30, 2026</div>';
-  return '<div style="display:flex;align-items:center;justify-content:space-between;padding:20px 34px 18px;border-bottom:1px solid rgba(12,31,61,.07);flex:none"><div><div style="font-size:.62rem;font-weight:700;letter-spacing:.2em;color:#a87e45">'+t[0]+'</div><h2 style="font-size:1.4rem;font-weight:700;color:#0c1f3d;letter-spacing:-.02em;margin-top:4px">'+t[1]+'</h2></div><div style="display:flex;align-items:center;gap:12px">'+right+'<button class="hoverSoft" data-act="signOut" style="display:inline-flex;align-items:center;gap:7px;font-size:.78rem;font-weight:600;color:#5b6473;padding:7px 12px;border-radius:9px">'+ic('logout',{size:15,sw:1.8})+'Sign out</button></div></div>';
+  const right=inv?'<span style="display:inline-flex;align-items:center;gap:7px;font-size:.76rem;font-weight:600;color:#1f8a5b;background:rgba(31,138,91,.1);padding:6px 13px;border-radius:999px"><span style="width:7px;height:7px;border-radius:50%;background:#1f8a5b"></span>'+esc(viewer().state)+'</span>':'<div style="font-size:.78rem;color:#8b93a3;font-weight:500">Tuesday · Jun 30, 2026</div>';
+  return '<div style="display:flex;align-items:center;justify-content:space-between;padding:20px 34px 18px;border-bottom:1px solid rgba(12,31,61,.07);flex:none"><div><div style="font-size:.62rem;font-weight:700;letter-spacing:.2em;color:#a87e45">'+t[0]+'</div><h2 style="font-size:1.4rem;font-weight:700;color:#0c1f3d;letter-spacing:-.02em;margin-top:4px">'+t[1]+'</h2></div><div style="display:flex;align-items:center;gap:12px">'+demoButton('inbox','Demo inbox')+right+'<button class="hoverSoft" data-act="signOut" style="display:inline-flex;align-items:center;gap:7px;font-size:.78rem;font-weight:600;color:#5b6473;padding:7px 12px;border-radius:9px">'+ic('logout',{size:15,sw:1.8})+'Sign out</button></div></div>';
 }
 
 // ---- investor views ----
 function ivOverview(){
+  const inv=viewer(), SCHED=demoSchedule(inv), paid=SCHED.filter(d=>d.status==='paid');
+  if(!SCHED.length)return '<div class="demo-page">'+demoCard('Note overview','<p>'+esc(inv.name)+' · '+esc(inv.state)+'</p><p>The schedule appears when Investor Relations records the wire and terms.</p>')+'</div>';
+  const next=SCHED.find(d=>d.status==='next'), ratio=Math.round(100*paid.length/SCHED.length);
+  const totalPaid=paid.reduce((n,d)=>n+d.cents,0)/100;
+  const daysToEnd=(Date.parse(SCHED.at(-1).iso)-Date.parse(DEMO_DAY))/DAY;
   const bars=SCHED.map(function(d){var b=d.status==='paid'?'flex:1;height:100%;border-radius:3px;background:linear-gradient(180deg,#cdaf7e,#a87e45)':(d.status==='next'?'flex:1;height:100%;border-radius:3px;background:#0071e3':'flex:1;height:100%;border-radius:3px;background:rgba(12,31,61,.12)');return '<i style="'+b+'"></i>';}).join('');
   const tile=(lbl,val,sub)=>'<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:18px 20px"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">'+lbl+'</div><div style="font-size:1.55rem;font-weight:800;letter-spacing:-.02em;margin-top:10px'+(lbl==='STATUS'?';color:#1f8a5b':'')+'">'+val+'</div>'+(sub?'<div style="font-size:.74rem;color:#8b93a3;margin-top:2px">'+sub+'</div>':'')+'</div>';
   const qa=(act,view,svg,label)=>'<button class="hoverAcc" data-act="'+act+'"'+(view?' data-view="'+view+'"':'')+' style="display:flex;align-items:center;gap:9px;padding:12px 13px;border-radius:11px;background:#f4f1ea;border:1px solid rgba(12,31,61,.07);font-size:.8rem;font-weight:600;color:#0c1f3d;text-align:left">'+ic(svg,{size:16,sw:2,color:'#0071e3'})+label+'</button>';
   const ledger=SCHED.map(function(d){
     var lbl=d.status==='paid'?'Paid':(d.status==='next'?'Next':'Upcoming');
     var dot=d.status==='paid'?'width:18px;height:18px;border-radius:50%;flex:none;background:rgba(31,138,91,.14);display:inline-block':(d.status==='next'?'width:18px;height:18px;border-radius:50%;flex:none;background:#0071e3;box-shadow:0 0 0 4px rgba(0,113,227,.14);display:inline-block':'width:18px;height:18px;border-radius:50%;flex:none;background:rgba(12,31,61,.08);display:inline-block');
-    var ref=d.status==='upcoming'?'—':('ACH·'+(2400+d.n*7));
+    var ref=esc(d.ref||'—'); if(d.paidDate)lbl+=' · '+esc(fmtShort(d.paidDate));
     return '<div style="display:grid;grid-template-columns:48px 1.4fr 1fr 1fr 1fr;align-items:center;padding:13px 0;border-bottom:1px solid rgba(12,31,61,.05)"><div style="font-size:.78rem;color:#9aa1ad;font-weight:600">'+d.n+'</div><div style="display:flex;align-items:center;gap:11px"><span style="'+dot+'"></span><span style="font-size:.88rem;font-weight:600">'+d.date+'</span></div><div style="font-size:.88rem;font-weight:700">'+d.amount+'</div><div><span style="'+pill(lbl)+'">'+lbl+'</span></div><div style="font-size:.8rem;color:#9aa1ad;font-family:ui-monospace,Menlo,monospace">'+ref+'</div></div>';
   }).join('');
   return '<div style="padding:26px 34px 36px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-content:start">'
-    +'<div style="grid-column:span 2;background:linear-gradient(158deg,#0b1d3a,#16335e);color:#eef2fb;border-radius:16px;padding:24px 26px;position:relative;overflow:hidden;min-height:154px;display:flex;flex-direction:column;justify-content:space-between"><div aria-hidden="true" style="position:absolute;top:-70px;right:-40px;width:210px;height:210px;background:radial-gradient(closest-side,rgba(200,168,120,.22),transparent)"></div><div style="position:relative;font-size:.62rem;font-weight:700;letter-spacing:.16em;color:#c8a878">NEXT DISTRIBUTION</div><div style="position:relative"><div style="font-size:2.7rem;font-weight:800;letter-spacing:-.03em;color:#fff;line-height:1">$3,750</div><div style="font-size:.88rem;color:#aeb8cb;margin-top:6px">Arrives in 8 days · <span style="color:#fff;font-weight:600">'+SCHED[14].date+'</span></div></div></div>'
-    +'<div style="grid-column:span 2;background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:18px 24px;display:flex;align-items:center;gap:22px;min-height:154px"><svg width="116" height="116" viewBox="0 0 120 120" style="flex:none"><circle cx="60" cy="60" r="50" fill="none" stroke="rgba(12,31,61,.09)" stroke-width="11"></circle><circle cx="60" cy="60" r="50" fill="none" stroke="#a87e45" stroke-width="11" stroke-linecap="round" stroke-dasharray="182 314" transform="rotate(-90 60 60)"></circle><text x="60" y="56" text-anchor="middle" font-size="22" font-weight="800" fill="#0c1f3d" font-family="Manrope">58%</text><text x="60" y="74" text-anchor="middle" font-size="10" font-weight="600" fill="#8b93a3" font-family="Manrope">of term</text></svg><div><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">MATURITY</div><div style="font-size:1.22rem;font-weight:800;letter-spacing:-.02em;margin-top:8px">April 14, 2027</div><div style="font-size:.84rem;color:#5b6473;margin-top:3px">10 months remaining</div><div style="font-size:.8rem;color:#1f8a5b;font-weight:600;margin-top:8px">14 of 24 distributions paid</div></div></div>'
-    +tile('PRINCIPAL','$250,000')+tile('FIXED RATE','18.0%','over 24 months')+tile('STATUS','Active','funded Apr 2025')+tile('NOTICES','None','we notify you 90 days before your note expires')
-    +'<div style="grid-column:span 2;background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:18px 22px"><div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">DISTRIBUTED TO DATE</div><div style="font-size:.72rem;color:#8b93a3;font-weight:600">14 of 24</div></div><div style="font-size:1.55rem;font-weight:800;letter-spacing:-.02em;margin-top:8px">$52,500</div><div style="display:flex;align-items:flex-end;gap:3px;height:40px;margin-top:12px">'+bars+'</div><div style="display:flex;justify-content:space-between;font-size:.66rem;color:#8b93a3;margin-top:7px"><span>May 2025</span><span>Apr 2027</span></div></div>'
+    +'<div style="grid-column:span 2;background:linear-gradient(158deg,#0b1d3a,#16335e);color:#eef2fb;border-radius:16px;padding:24px 26px;position:relative;overflow:hidden;min-height:154px;display:flex;flex-direction:column;justify-content:space-between"><div aria-hidden="true" style="position:absolute;top:-70px;right:-40px;width:210px;height:210px;background:radial-gradient(closest-side,rgba(200,168,120,.22),transparent)"></div><div style="position:relative;font-size:.62rem;font-weight:700;letter-spacing:.16em;color:#c8a878">NEXT DISTRIBUTION</div><div style="position:relative"><div style="font-size:2.7rem;font-weight:800;letter-spacing:-.03em;color:#fff;line-height:1">'+(next?next.amount:'—')+'</div><div style="font-size:.88rem;color:#aeb8cb;margin-top:6px">'+(next?'Scheduled':'All distributions recorded')+' · <span style="color:#fff;font-weight:600">'+(next?next.date:'—')+'</span></div></div></div>'
+    +'<div style="grid-column:span 2;background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:18px 24px;display:flex;align-items:center;gap:22px;min-height:154px"><svg width="116" height="116" viewBox="0 0 120 120" style="flex:none"><circle cx="60" cy="60" r="50" fill="none" stroke="rgba(12,31,61,.09)" stroke-width="11"></circle><circle cx="60" cy="60" r="50" fill="none" stroke="#a87e45" stroke-width="11" stroke-linecap="round" stroke-dasharray="'+(314*ratio/100)+' 314" transform="rotate(-90 60 60)"></circle><text x="60" y="56" text-anchor="middle" font-size="22" font-weight="800" fill="#0c1f3d" font-family="Manrope">'+ratio+'%</text><text x="60" y="74" text-anchor="middle" font-size="10" font-weight="600" fill="#8b93a3" font-family="Manrope">of term</text></svg><div><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">MATURITY</div><div style="font-size:1.22rem;font-weight:800;letter-spacing:-.02em;margin-top:8px">'+esc(inv.maturity)+'</div><div style="font-size:.84rem;color:#5b6473;margin-top:3px">'+(SCHED.length-paid.length)+' distributions remaining</div><div style="font-size:.8rem;color:#1f8a5b;font-weight:600;margin-top:8px">'+paid.length+' of '+SCHED.length+' distributions paid</div></div></div>'
+    +tile('PRINCIPAL',esc(inv.principal))+tile('FIXED RATE',esc(inv.rate),'over '+esc(inv.term))+tile('STATUS',daysToEnd<0?'Expired':esc(inv.state),'funded '+esc(inv.wire))+tile('NOTICES',daysToEnd<0?'Note expired':daysToEnd<=90?'Maturity approaching':'None','Final distribution '+SCHED.at(-1).date)
+    +'<div style="grid-column:span 2;background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:18px 22px"><div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">DISTRIBUTED TO DATE</div><div style="font-size:.72rem;color:#8b93a3;font-weight:600">'+paid.length+' of '+SCHED.length+'</div></div><div style="font-size:1.55rem;font-weight:800;letter-spacing:-.02em;margin-top:8px">'+fmtMoney(totalPaid)+'</div><div style="display:flex;align-items:flex-end;gap:3px;height:40px;margin-top:12px">'+bars+'</div><div style="display:flex;justify-content:space-between;font-size:.66rem;color:#8b93a3;margin-top:7px"><span>'+SCHED[0].date+'</span><span>'+SCHED.at(-1).date+'</span></div></div>'
     +'<div style="grid-column:span 2;background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:18px 22px;display:flex;flex-direction:column"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">QUICK ACTIONS</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">'+qa('go','documents','file','Documents')+qa('go','profile','user','Account &amp; profile')+'</div></div>'
-    +'<div style="grid-column:span 4;background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:8px 24px 14px"><div style="display:flex;align-items:baseline;justify-content:space-between;padding:16px 0 0"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">DISTRIBUTION SCHEDULE</div><div style="font-size:.72rem;color:#8b93a3;font-weight:600">May 2025 — Apr 2027</div></div><div style="display:grid;grid-template-columns:48px 1.4fr 1fr 1fr 1fr;padding:14px 0 12px;border-bottom:1px solid rgba(12,31,61,.08);font-size:.64rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8b93a3"><div>#</div><div>Distribution date</div><div>Amount</div><div>Status</div><div>Reference</div></div>'+ledger+'</div>'
+    +'<div style="grid-column:span 4;background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:8px 24px 14px"><div style="display:flex;align-items:baseline;justify-content:space-between;padding:16px 0 0"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">DISTRIBUTION SCHEDULE</div><div style="font-size:.72rem;color:#8b93a3;font-weight:600">'+SCHED[0].date+' — '+SCHED.at(-1).date+'</div></div><div style="display:grid;grid-template-columns:48px 1.4fr 1fr 1fr 1fr;padding:14px 0 12px;border-bottom:1px solid rgba(12,31,61,.08);font-size:.64rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8b93a3"><div>#</div><div>Distribution date</div><div>Amount</div><div>Status</div><div>Reference</div></div>'+ledger+'</div>'
     +'</div>';
 }
 function ivDocuments(){
-  if(!state.documents.length){return '<div style="padding:26px 34px 36px"><div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:56px 32px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px"><span style="width:44px;height:44px;border-radius:11px;flex:none;background:#f4f1ea;display:flex;align-items:center;justify-content:center;color:#a87e45">'+ic('file',{size:20})+'</span><div><div style="font-size:.92rem;font-weight:700">No documents yet</div><div style="font-size:.82rem;color:#8b93a3;max-width:440px;line-height:1.55;margin-top:5px">Statements, tax forms, and agreements will appear here as Investor Relations issues them.</div></div></div></div>';}
-  const rows=state.documents.map(function(d){return '<div style="display:grid;grid-template-columns:1.8fr 1fr 1fr 90px;align-items:center;padding:14px 0;border-bottom:1px solid rgba(12,31,61,.05)"><div style="display:flex;align-items:center;gap:13px"><span style="width:36px;height:36px;border-radius:9px;flex:none;background:#f4f1ea;display:flex;align-items:center;justify-content:center;color:#a87e45">'+ic('file',{size:17})+'</span><span style="font-size:.88rem;font-weight:600">'+esc(d.name)+'</span></div><div><span style="display:inline-flex;align-items:center;font-size:.68rem;font-weight:700;letter-spacing:.04em;color:#a87e45;background:rgba(168,126,69,.1);padding:3px 9px;border-radius:6px">'+d.kind+'</span></div><div style="font-size:.84rem;color:#5b6473">'+d.date+'</div><div style="text-align:right"><button data-act="download" data-name="'+esc(d.name)+'" style="width:34px;height:34px;border-radius:9px;color:#0071e3;display:inline-flex;align-items:center;justify-content:center">'+ic('download',{size:17,sw:1.8})+'</button></div></div>';}).join('');
+  const docs=state.documents.filter(d=>d.owner===state.viewer);
+  if(!docs.length){return '<div style="padding:26px 34px 36px"><div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:56px 32px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px"><span style="width:44px;height:44px;border-radius:11px;flex:none;background:#f4f1ea;display:flex;align-items:center;justify-content:center;color:#a87e45">'+ic('file',{size:20})+'</span><div><div style="font-size:.92rem;font-weight:700">No documents yet</div><div style="font-size:.82rem;color:#8b93a3;max-width:440px;line-height:1.55;margin-top:5px">Statements, tax forms, and agreements will appear here as Investor Relations issues them.</div></div></div></div>';}
+  const rows=docs.map(function(d){return '<div style="display:grid;grid-template-columns:1.8fr 1fr 1fr 90px;align-items:center;padding:14px 0;border-bottom:1px solid rgba(12,31,61,.05)"><div style="display:flex;align-items:center;gap:13px"><span style="width:36px;height:36px;border-radius:9px;flex:none;background:#f4f1ea;display:flex;align-items:center;justify-content:center;color:#a87e45">'+ic('file',{size:17})+'</span><span style="font-size:.88rem;font-weight:600">'+esc(d.name)+'</span></div><div><span style="display:inline-flex;align-items:center;font-size:.68rem;font-weight:700;letter-spacing:.04em;color:#a87e45;background:rgba(168,126,69,.1);padding:3px 9px;border-radius:6px">'+d.kind+'</span></div><div style="font-size:.84rem;color:#5b6473">'+d.date+'</div><div style="text-align:right"><button aria-label="Download sample PDF" data-act="download" data-id="'+d.id+'" style="width:34px;height:34px;border-radius:9px;color:#0071e3;display:inline-flex;align-items:center;justify-content:center">'+ic('download',{size:17,sw:1.8})+'</button></div></div>';}).join('');
   return '<div style="padding:26px 34px 36px"><div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:8px 24px 14px"><div style="display:grid;grid-template-columns:1.8fr 1fr 1fr 90px;padding:16px 0 12px;border-bottom:1px solid rgba(12,31,61,.08);font-size:.64rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8b93a3"><div>Document</div><div>Type</div><div>Date</div><div style="text-align:right">Download</div></div>'+rows+'</div></div>';
 }
 function ivProfile(){
-  const tog=(k,label)=>{var on=state.toggles[k];return '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:.82rem;color:#0c1f3d;font-weight:500">'+label+'</span><span data-act="toggle" data-k="'+k+'" style="width:38px;height:22px;border-radius:999px;position:relative;display:inline-block;cursor:pointer;background:'+(on?'#1f8a5b':'rgba(12,31,61,.2)')+'"><span style="position:absolute;top:2px;'+(on?'left:18px':'left:2px')+';width:18px;height:18px;border-radius:50%;background:#fff"></span></span></div>';};
+  const inv=viewer();
+  const tog=(k,label)=>{var on=preferences(inv)[k];return '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:.82rem;color:#0c1f3d;font-weight:500">'+label+'</span><span data-act="toggle" data-k="'+k+'" style="width:38px;height:22px;border-radius:999px;position:relative;display:inline-block;cursor:pointer;background:'+(on?'#1f8a5b':'rgba(12,31,61,.2)')+'"><span style="position:absolute;top:2px;'+(on?'left:18px':'left:2px')+';width:18px;height:18px;border-radius:50%;background:#fff"></span></span></div>';};
   const row=(l,v,mono)=>'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:.82rem;color:#8b93a3">'+l+'</span><span style="font-size:.88rem;font-weight:600'+(mono?';font-family:ui-monospace,Menlo,monospace':'')+'">'+v+'</span></div>';
   return '<div style="padding:26px 34px 36px;display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">'
-    +'<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:24px 26px"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">ACCOUNT</div><div style="margin-top:16px;display:flex;flex-direction:column;gap:15px">'+row('Legal name','Margaret Vance')+row('Account type','Individual')+row('Email','m.vance@gmail.com')+row('Phone','(212) 555·0148')+'</div></div>'
-    +'<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:24px 26px"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">BANKING ON FILE</div></div><div style="margin-top:16px;display:flex;flex-direction:column;gap:15px">'+row('Account','Chase ••••6042',true)+row('Method','ACH · monthly')+'</div><div style="font-size:.76rem;color:#8b93a3;background:#f4f1ea;border-radius:10px;padding:10px 13px;margin-top:16px">To change banking, contact Investor Relations — changes are confirmed by phone before they take effect.</div></div>'
+    +'<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:24px 26px"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">ACCOUNT</div><div style="margin-top:16px;display:flex;flex-direction:column;gap:15px">'+row('Legal name',esc(inv.name))+row('Account type',esc(inv.type))+row('Email',esc(inv.email))+row('Phone',esc(inv.phone||'—'))+'</div></div>'
+    +'<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:24px 26px"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">BANKING ON FILE</div></div><div style="margin-top:16px;display:flex;flex-direction:column;gap:15px">'+row('Account',inv.bank?esc(inv.bank)+' ••••'+esc(inv.last4):'—',true)+row('Method',esc(inv.method||'—'))+'</div><div style="font-size:.76rem;color:#8b93a3;background:#f4f1ea;border-radius:10px;padding:10px 13px;margin-top:16px">To change banking, contact Investor Relations — changes are confirmed by phone before they take effect.</div></div>'
     +'<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:24px 26px"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">NOTIFICATIONS</div><div style="margin-top:16px;display:flex;flex-direction:column;gap:15px">'+tog('posted','Distribution posted')+tog('maturity','Maturity reminders')+'</div></div>'
     +'<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:24px 26px;grid-column:span 2"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">SECURITY</div><div style="font-size:.9rem;font-weight:700;margin-top:12px">Change password</div><div style="display:flex;gap:12px;margin-top:12px;max-width:520px"><input id="pwCur" type="password" placeholder="Current password" style="flex:1;border:1px solid rgba(12,31,61,.14);border-radius:11px;padding:11px 14px;font-size:.86rem;background:#fff;outline:none"><input id="pwNew" type="password" placeholder="New password" style="flex:1;border:1px solid rgba(12,31,61,.14);border-radius:11px;padding:11px 14px;font-size:.86rem;background:#fff;outline:none"><button data-act="changePw" style="padding:0 18px;border-radius:10px;background:#0071e3;color:#fff;font-size:.84rem;font-weight:700;white-space:nowrap">Update</button></div><div style="font-size:.74rem;color:#8b93a3;margin-top:10px">At least 8 characters, with letters and numbers. In the live app this updates your database credentials.</div></div>'
     +'</div>';
@@ -189,7 +203,7 @@ function tvOverview(){
   const maturities=[['Harold & Anne Beckett','$500,000','20%','Jul 21, 2026','in 21 days',true],['Crest Harbor Holdings','$750,000','15%','Aug 3, 2026','in 34 days',true],['Dr. Lena Okafor','$300,000','18%','Sep 12, 2026','in 74 days',false],['Juniper Trust','$2,000,000','20%','Sep 28, 2026','in 90 days',false]].map(function(m){return '<div style="display:grid;grid-template-columns:1.6fr 1fr .8fr 1fr;align-items:center;padding:13px 0;border-bottom:1px solid rgba(12,31,61,.05)"><div style="font-size:.86rem;font-weight:600">'+m[0]+'</div><div style="font-size:.86rem;font-weight:700">'+m[1]+'</div><div style="font-size:.84rem;color:#5b6473">'+m[2]+'</div><div><div style="font-size:.84rem;font-weight:600">'+m[3]+'</div><div style="font-size:.74rem;font-weight:600;margin-top:2px;color:'+(m[5]?'#b07a1e':'#8b93a3')+'">'+m[4]+'</div></div></div>';}).join('');
   const kpi=(navy,lbl,val,sub,c)=>'<div style="'+(navy?'background:linear-gradient(158deg,#0b1d3a,#16335e);color:#eef2fb':'background:#fff;border:1px solid rgba(12,31,61,.08)')+';border-radius:16px;padding:20px 22px"><div style="font-size:.6rem;font-weight:700;letter-spacing:.14em;color:'+(navy?'#c8a878':'#a87e45')+'">'+lbl+'</div><div style="font-size:1.7rem;font-weight:800;margin-top:10px'+(navy?';color:#fff':(c?';color:'+c:''))+'">'+val+'</div><div style="font-size:.72rem;color:'+(navy?'#aeb8cb':'#8b93a3')+';margin-top:2px">'+sub+'</div></div>';
   const card=(view,ico,cbg,cfg,title,sub)=>'<div class="hoverAccBorder" data-act="go" data-view="'+view+'" style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:18px 20px;cursor:pointer;display:flex;align-items:center;gap:14px"><span style="width:42px;height:42px;border-radius:11px;flex:none;background:'+cbg+';color:'+cfg+';display:flex;align-items:center;justify-content:center">'+ic(ico,{size:20,sw:2,color:cfg})+'</span><div style="flex:1"><div style="font-size:.9rem;font-weight:700">'+title+'</div><div style="font-size:.76rem;color:#8b93a3">'+sub+'</div></div>'+ic('chev',{size:17,sw:2,color:'#9aa1ad'})+'</div>';
-  return '<div style="padding:26px 34px 36px;display:flex;flex-direction:column;gap:20px"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">'+kpi(true,'TOTAL CAPITAL','$48.2M','across 142 active notes')+kpi(false,'ACTIVE NOTES','142','+6 this month')+kpi(false,'DISTRIBUTED TO DATE','$6.71M','$612K this month')+kpi(false,'MATURING ≤ 90 DAYS','9','$5.4M principal','#b07a1e')+'</div>'
+  return '<div style="padding:26px 34px 36px;display:flex;flex-direction:column;gap:20px"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">'+kpi(true,'TOTAL CAPITAL','$48.2M','across 142 active notes')+kpi(false,'ACTIVE NOTES','142','+6 this month')+kpi(false,'DISTRIBUTED TO DATE',fmtMoney(state.investors.flatMap(demoSchedule).reduce((n,d)=>n+(d.paidDate?d.cents:0),0)/100),'recorded payments')+kpi(false,'MATURING ≤ 90 DAYS','9','$5.4M principal','#b07a1e')+'</div>'
     +'<div style="display:grid;grid-template-columns:1.7fr 1fr;gap:18px;align-items:start"><div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:16px;padding:8px 24px 14px"><div style="display:flex;align-items:baseline;justify-content:space-between;padding:18px 0 0"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">APPROACHING MATURITIES</div><span data-act="go" data-view="investors" style="font-size:.74rem;font-weight:600;color:#0071e3;cursor:pointer">All investors ›</span></div><div style="display:grid;grid-template-columns:1.6fr 1fr .8fr 1fr;padding:14px 0 11px;border-bottom:1px solid rgba(12,31,61,.08);font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8b93a3;margin-top:6px"><div>Investor</div><div>Principal</div><div>Rate</div><div>Matures</div></div>'+maturities+'</div>'
     +'<div style="display:flex;flex-direction:column;gap:14px">'+card('create','userplus','rgba(0,113,227,.12)','#0071e3','Create account','Add an investor & note terms')+card('investors','users','rgba(31,138,91,.12)','#1f8a5b','All investors','Manage notes & logins')+'</div></div></div>';
 }
@@ -220,8 +234,9 @@ function tvCreate(){
     +'<div style="font-size:.74rem;color:#8b93a3">Everything derives from the wire-received date: the note goes Active when it\'s set, the first distribution lands 30 days later, distributions recur every 30 days, the final one returns the principal, and the note expires after it.</div></div></div>';
   const login='<div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:14px;padding:20px 22px"><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">INVESTOR LOGIN</div><div style="display:flex;flex-direction:column;gap:12px;margin-top:15px">'
     +'<div style="flex:1"><div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#a87e45;margin-bottom:6px">LOGIN EMAIL</div>'+inp('caLoginEmail','Defaults to the contact email','')+'<div style="font-size:.72rem;color:#8b93a3;margin-top:6px">Defaults to the contact email if left blank.</div></div>'
-    +'<div style="flex:1"><div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#a87e45;margin-bottom:6px">INITIAL PASSWORD</div><div style="display:flex;gap:8px">'+inp('caPass','Set or generate','')+'<button data-act="caGenPass" style="padding:0 14px;border-radius:10px;background:#f4f1ea;border:1px solid rgba(12,31,61,.1);font-size:.82rem;font-weight:600;white-space:nowrap">Generate</button></div></div>'
-    +'<div data-act="caReq" style="display:flex;align-items:flex-start;gap:11px;cursor:pointer;margin-top:2px"><span style="width:20px;height:20px;border-radius:5px;flex:none;display:flex;align-items:center;justify-content:center;'+(state.ca.requirePw?'background:#1f8a5b':'border:1.5px solid rgba(12,31,61,.25)')+'">'+(state.ca.requirePw?ic('check',{size:13,sw:3,color:'#fff'}):'')+'</span><span style="font-size:.8rem;color:#0c1f3d;line-height:1.45">Require the investor to set their own password on first sign-in</span></div>'
+    +'<label><input id="demoInvite" type="checkbox" checked> Email an invitation to set a password</label>'
+    +'<div id="demoManual" hidden style="flex:1"><div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#a87e45;margin-bottom:6px">INITIAL PASSWORD</div><div style="display:flex;gap:8px">'+inp('caPass','Set or generate','')+'<button data-act="caGenPass" style="padding:0 14px;border-radius:10px;background:#f4f1ea;border:1px solid rgba(12,31,61,.1);font-size:.82rem;font-weight:600;white-space:nowrap">Generate</button></div></div>'
+    +'<div id="demoRequire" hidden data-act="caReq" style="display:flex;align-items:flex-start;gap:11px;cursor:pointer;margin-top:2px"><span style="width:20px;height:20px;border-radius:5px;flex:none;display:flex;align-items:center;justify-content:center;'+(state.ca.requirePw?'background:#1f8a5b':'border:1.5px solid rgba(12,31,61,.25)')+'">'+(state.ca.requirePw?ic('check',{size:13,sw:3,color:'#fff'}):'')+'</span><span style="font-size:.8rem;color:#0c1f3d;line-height:1.45">Require the investor to set their own password on first sign-in</span></div>'
     +'</div></div>';
   return '<div style="padding:26px 34px 36px;max-width:760px;display:flex;flex-direction:column;gap:16px">'+details+terms+login
     +'<button data-act="createAccount" style="align-self:flex-start;padding:13px 24px;border-radius:11px;background:#0071e3;color:#fff;font-size:.9rem;font-weight:700">Create account</button></div>';
@@ -255,7 +270,7 @@ function detailOverlay(){
     +'<div style="flex:1"><div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#a87e45;margin-bottom:6px">INITIAL PASSWORD</div><div style="display:flex;gap:8px">'+inp('clPass','Set or generate','')+'<button data-act="genPass" style="padding:0 14px;border-radius:10px;background:#f4f1ea;border:1px solid rgba(12,31,61,.1);font-size:.82rem;font-weight:600;white-space:nowrap">Generate</button></div></div>'
     +'<button data-act="setLogin" data-id="'+di.id+'" style="padding:11px 18px;border-radius:10px;background:#0071e3;color:#fff;font-size:.84rem;font-weight:700">'+(di.hasLogin?'Reset login':'Create login')+'</button>'
     +'<div style="font-size:.74rem;color:#8b93a3">Creates the investor\'s sign-in. Share the email + password securely; they can change it in Profile.</div></div></div>';
-  return '<div style="position:fixed;inset:0;z-index:60"><div data-act="closeDetail" style="position:absolute;inset:0;background:rgba(11,29,58,.42)"></div><div style="position:absolute;top:0;right:0;bottom:0;width:444px;max-width:94vw;background:#faf7f0;box-shadow:-30px 0 60px -20px rgba(11,29,58,.45);display:flex;flex-direction:column"><div style="padding:22px 26px;border-bottom:1px solid rgba(12,31,61,.08);display:flex;align-items:flex-start;justify-content:space-between"><div><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">INVESTOR</div><div style="font-size:1.3rem;font-weight:800;margin-top:4px">'+esc(di.name)+'</div><div style="margin-top:9px"><span style="'+pill(di.state)+'">'+di.state+'</span></div></div><button data-act="closeDetail" style="width:34px;height:34px;border-radius:9px;color:#5b6473;display:flex;align-items:center;justify-content:center">'+ic('x',{size:18,sw:2})+'</button></div><div class="acg-scroll" style="flex:1;overflow:auto;padding:22px 26px;display:flex;flex-direction:column;gap:16px"><div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:13px">'+fact('Type',di.type)+fact('Email',esc(di.email))+fact('Phone',esc(di.phone||'—'))+fact('Principal',di.principal,true)+fact('Rate · term',di.rate+' · '+di.term)+fact('Maturity',di.maturity)+fact('Login',di.hasLogin?'Provisioned':'Not set')+'</div>'+profileCard+manageNote+setLogin+'</div></div></div>';
+  return '<div style="position:fixed;inset:0;z-index:60"><div data-act="closeDetail" style="position:absolute;inset:0;background:rgba(11,29,58,.42)"></div><div style="position:absolute;top:0;right:0;bottom:0;width:444px;max-width:94vw;background:#faf7f0;box-shadow:-30px 0 60px -20px rgba(11,29,58,.45);display:flex;flex-direction:column"><div style="padding:22px 26px;border-bottom:1px solid rgba(12,31,61,.08);display:flex;align-items:flex-start;justify-content:space-between"><div><div style="font-size:.62rem;font-weight:700;letter-spacing:.14em;color:#a87e45">INVESTOR</div><div style="font-size:1.3rem;font-weight:800;margin-top:4px">'+esc(di.name)+'</div><div style="margin-top:9px"><span style="'+pill(di.state)+'">'+di.state+'</span></div></div><button data-act="closeDetail" style="width:34px;height:34px;border-radius:9px;color:#5b6473;display:flex;align-items:center;justify-content:center">'+ic('x',{size:18,sw:2})+'</button></div><div class="acg-scroll" style="flex:1;overflow:auto;padding:22px 26px;display:flex;flex-direction:column;gap:16px"><div style="background:#fff;border:1px solid rgba(12,31,61,.08);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:13px">'+fact('Type',di.type)+fact('Email',esc(di.email))+fact('Phone',esc(di.phone||'—'))+fact('Principal',di.principal,true)+fact('Rate · term',di.rate+' · '+di.term)+fact('Maturity',di.maturity)+fact('Login',di.hasLogin?'Provisioned':'Not set')+'</div>'+profileCard+manageNote+paymentCard(di)+pdfCard(di)+setLogin+demoButton('emailInvite','Email password link')+demoButton('previewInvestor','Switch to this demo investor')+'</div></div></div>';
 }
 function composeOverlay(){
   const c=state.compose;if(!c)return '';
@@ -268,14 +283,15 @@ function composeOverlay(){
 // RENDER
 // =====================================================================
 function currentView(){
-  if(state.mode==='investor'){return ({overview:ivOverview,documents:ivDocuments,profile:ivProfile}[state.iv]||ivOverview)();}
-  return ({overview:tvOverview,investors:tvInvestors,create:tvCreate}[state.tv]||tvOverview)();
+  if(state.mode==='investor'){return ({overview:ivOverview,documents:ivDocuments,profile:ivProfile,security:securityView}[state.iv]||ivOverview)();}
+  return ({overview:tvOverview,investors:tvInvestors,create:tvCreate,security:securityView}[state.tv]||tvOverview)();
 }
 function render(){
   let html;
   if(!state.auth){html=gateView();}
   else{html='<div style="display:flex;height:calc(100vh - 34px);overflow:hidden;background:#0b1d3a">'+sidebar()+'<main style="flex:1;min-width:0;background:#faf7f0;display:flex;flex-direction:column;overflow:hidden;border-top-left-radius:14px;border-bottom-left-radius:14px;position:relative">'+topbar()+'<div class="acg-scroll" style="flex:1;overflow:auto">'+currentView()+'</div></main></div>'+detailOverlay()+composeOverlay();}
-  if(state.toast)html+='<div style="position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:95;background:#0b1d3a;color:#fff;padding:12px 20px;border-radius:12px;box-shadow:0 18px 44px -10px rgba(11,29,58,.55);font-size:.84rem;font-weight:600;display:flex;align-items:center;gap:10px">'+ic('check',{size:16,sw:2.6,color:'#7fd6a6'})+esc(state.toast)+'</div>';
+  if(state.inbox)html+=demoInbox();
+  if(state.toast)html+='<div id="demo-toast" role="status" style="position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:95;background:#0b1d3a;color:#fff;padding:12px 20px;border-radius:12px;box-shadow:0 18px 44px -10px rgba(11,29,58,.55);font-size:.84rem;font-weight:600;display:flex;align-items:center;gap:10px">'+ic('check',{size:16,sw:2.6,color:'#7fd6a6'})+esc(state.toast)+'</div>';
   document.getElementById('app').innerHTML=html;
   scrollMsgs();
   var rs=document.getElementById('rosterSearch');if(rs)rs.addEventListener('input',onRosterSearch);
@@ -288,40 +304,229 @@ function onRosterSearch(e){var q=e.target.value.trim().toLowerCase();document.qu
 const H={
   roleInv:()=>{state.role='investor';render();},
   roleTeam:()=>{state.role='team';render();},
-  signIn:()=>{state.auth=true;state.mode=state.role==='team'?'team':'investor';state.iv='overview';state.tv='overview';render();toast(state.role==='team'?'Signed in — Team console':'Welcome back, Margaret');},
-  signOut:()=>{state.auth=false;state.detail=null;state.compose=null;render();},
+  signIn:()=>{const email=read('le').toLowerCase();const account=state.investors.find(i=>i.email.toLowerCase()===email&&i.hasLogin);if(state.role==='investor'&&!account)return toast('Choose a provisioned demo investor email.');enterDemo(state.role,account?.id);},
+  signOut:()=>{state.auth=false;state.authFlow='';state.detail=null;state.compose=null;render();},
   go:(el)=>{var v=el.getAttribute('data-view');if(state.mode==='investor')state.iv=v;else state.tv=v;render();},
-  goTeam:()=>{state.mode='team';state.tv='overview';render();},
-  goInvestor:()=>{state.mode='investor';state.iv='overview';render();},
-  toggle:(el)=>{var k=el.getAttribute('data-k');state.toggles[k]=!state.toggles[k];render();},
-  caInd:()=>{state.ca.type='Individual';render();},
-  caEnt:()=>{state.ca.type='Entity';render();},
-  caReq:()=>{state.ca.requirePw=!state.ca.requirePw;render();},
+  goTeam:()=>enterDemo('team'),
+  goInvestor:()=>enterDemo('investor',state.viewer),
+  toggle:(el)=>{var k=el.getAttribute('data-k');preferences(viewer())[k]=!preferences(viewer())[k];render();},
+  caInd:()=>{state.ca.type='Individual';refreshCreate();},
+  caEnt:()=>{state.ca.type='Entity';refreshCreate();},
+  caReq:()=>{state.ca.requirePw=!state.ca.requirePw;refreshCreate();},
   caGenPass:()=>{var el=document.getElementById('caPass');if(!el)return;var c='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789',p='';for(var i=0;i<14;i++)p+=c[Math.floor(Math.random()*c.length)];el.value=p+'2a';},
-  createAccount:()=>{var g=v=>((document.getElementById(v)||{}).value||'').trim();var name=g('caName'),email=g('caEmail');if(!name||!email){toast('Enter a legal name and contact email');return;}var p=g('caPrincipal'),r=g('caRate'),term=g('caTerm')||'24',wire=g('caWire'),st=wire?'Active':'Awaiting';var login=g('caLoginEmail')||email;var pn=toNum(p);var amt=calcAmount(p,r);var mat=calcMaturity(wire,term);state.investors.push({id:uid(),name:name,type:state.ca.type,state:st,principal:(pn>0)?('$'+pn.toLocaleString('en-US')):'—',rate:r?(r.replace(/[^0-9.]/g,'')+'%'):'—',term:term+' mo',amount:amt,email:login,phone:g('caPhone'),wire:fmtShort(wire),maturity:mat,hasLogin:true});state.ca={type:'Individual',requirePw:true,phone:'',principal:'',rate:'',term:'24',wire:''};state.tv='investors';render();toast('Account created — share the login with the investor (demo — resets on refresh)');},
+  createAccount:()=>{var g=v=>((document.getElementById(v)||{}).value||'').trim();var name=g('caName'),email=g('caEmail');if(!name||!email){toast('Enter a legal name and contact email');return;}var p=g('caPrincipal'),r=g('caRate'),term=g('caTerm')||'24',wire=g('caWire'),st=wire?'Active':'Awaiting';var login=g('caLoginEmail')||email,invite=document.getElementById('demoInvite').checked;if(!invite&&!validPw(g('caPass')))return toast('Use at least 8 characters with letters and numbers.');var pn=toNum(p);var amt=calcAmount(p,r);var mat=calcMaturity(wire,term);state.investors.push({id:uid(),name:name,type:state.ca.type,state:st,principal:(pn>0)?('$'+pn.toLocaleString('en-US')):'—',rate:r?(r.replace(/[^0-9.]/g,'')+'%'):'—',term:term+' mo',amount:amt,email:login,phone:g('caPhone'),wire:fmtShort(wire),maturity:mat,hasLogin:true});if(invite)queueLink(state.investors.at(-1),'Invitation');state.ca={type:'Individual',requirePw:true,phone:'',principal:'',rate:'',term:'24',wire:''};state.tv='investors';render();toast(invite?'Account created. Invitation added to the demo inbox.':'Account created with an initial password.');},
   addInvestor:()=>{state.compose={kind:'investor'};render();},
   closeCompose:()=>{state.compose=null;render();},
   submitCompose:()=>{var c=state.compose;if(!c)return;
     var name=((document.getElementById('cName')||{}).value||'').trim();var email=((document.getElementById('cEmail')||{}).value||'').trim();if(!name||!email){toast('Enter a name and email');return;}state.investors.push({id:uid(),name:name,type:'Individual',state:'Awaiting',principal:'—',rate:'—',term:'—',email:email,wire:'—',maturity:'—',hasLogin:false});state.compose=null;state.tv='investors';render();toast('Investor added — set note terms & login next');},
   openDetail:(el)=>{var id=el.getAttribute('data-id');state.detail=id;var di=state.investors.find(function(v){return v.id===id;});if(di){state.mn={principal:(di.principal||'').replace(/[^0-9.]/g,''),rate:(di.rate||'').replace(/[^0-9.]/g,''),term:((String(di.term).match(/\d+/)||['24'])[0]),wire:toISO(di.wire)};}render();},
   closeDetail:()=>{state.detail=null;render();},
-  saveNote:(el)=>{var id=el.getAttribute('data-id');var g=v=>((document.getElementById(v)||{}).value||'').trim();var p=g('mnPrincipal'),r=g('mnRate'),term=g('mnTerm')||'24',wire=g('mnWire');var pn=toNum(p);var amt=calcAmount(p,r);var mat=calcMaturity(wire,term);state.investors=state.investors.map(function(v){return v.id===id?Object.assign({},v,{state:(wire||(v.wire&&v.wire!=='—'))?'Active':'Awaiting',principal:(pn>0)?('$'+pn.toLocaleString('en-US')):v.principal,rate:r?(r.replace(/[^0-9.]/g,'')+'%'):v.rate,term:term+' mo',amount:amt,wire:wire?fmtShort(wire):v.wire,maturity:wire?mat:v.maturity}):v;});state.detail=null;render();toast('Note terms saved — schedule updated');},
+  saveNote:()=>{
+    const inv=selected(), wire=read('mnWire'), months=Number(read('mnTerm')), principal=toNum(read('mnPrincipal')), rate=toNum(read('mnRate'));
+    if(!inv||!months||!(principal>0)||!(rate>=0))return toast('Enter valid note terms.');
+    const proposed={...inv,state:wire?'Active':'Awaiting',principal:fmtMoney(principal),rate:rate+'%',term:months+' mo',wire:fmtShort(wire),maturity:calcMaturity(wire,months)};
+    const future=demoSchedule(proposed);
+    if(demoSchedule(inv).some(d=>d.paidDate&&(future[d.n-1]?.iso!==d.iso||future[d.n-1]?.cents!==d.cents))){
+      return toast('These terms would change a recorded distribution. Keep its date, position and amount.');
+    }
+    Object.assign(inv,proposed);state.detail=null;toast('Note terms saved. Recorded payments preserved.');
+  },
   saveProfile:(el)=>{var id=el.getAttribute('data-id');var g=v=>((document.getElementById(v)||{}).value||'').trim();var ck=v=>!!((document.getElementById(v)||{}).checked);var name=g('mpName'),email=g('mpEmail');state.investors=state.investors.map(function(v){return v.id===id?Object.assign({},v,{name:name||v.name,email:email||v.email,phone:g('mpPhone'),bank:g('mpBank'),last4:g('mpLast4'),method:g('mpMethod')}):v;});render();toast('Profile saved — the investor sees this on their Profile page (demo — resets on refresh)');},
   genPass:()=>{var el=document.getElementById('clPass');if(!el)return;var c='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789',p='';for(var i=0;i<14;i++)p+=c[Math.floor(Math.random()*c.length)];el.value=p+'2a';},
-  setLogin:(el)=>{var id=el.getAttribute('data-id');var email=((document.getElementById('clEmail')||{}).value||'').trim();var pass=((document.getElementById('clPass')||{}).value||'').trim();if(!email){toast('Enter a login email');return;}if(pass.length<8){toast('Password must be at least 8 characters');return;}state.investors=state.investors.map(function(v){return v.id===id?Object.assign({},v,{hasLogin:true,email:email}):v;});render();toast('Login set — share '+email+' + password with the investor');},
-  changePw:()=>{var cur=((document.getElementById('pwCur')||{}).value||''),nw=((document.getElementById('pwNew')||{}).value||'');if(!cur){toast('Enter your current password');return;}if(nw.length<8){toast('New password must be at least 8 characters');return;}var a=document.getElementById('pwCur'),b=document.getElementById('pwNew');if(a)a.value='';if(b)b.value='';toast('Password updated');},
+  setLogin:(el)=>{var id=el.getAttribute('data-id');var email=((document.getElementById('clEmail')||{}).value||'').trim();var pass=((document.getElementById('clPass')||{}).value||'').trim();if(!email){toast('Enter a login email');return;}if(!validPw(pass)){toast('Use 8–200 characters with letters and numbers.');return;}state.investors=state.investors.map(function(v){return v.id===id?Object.assign({},v,{hasLogin:true,email:email}):v;});render();toast('Login set — share '+email+' + password with the investor');},
+  changePw:()=>{var cur=((document.getElementById('pwCur')||{}).value||''),nw=((document.getElementById('pwNew')||{}).value||'');if(!cur){toast('Enter your current password');return;}if(!validPw(nw)){toast('Use 8–200 characters with letters and numbers.');return;}var a=document.getElementById('pwCur'),b=document.getElementById('pwNew');if(a)a.value='';if(b)b.value='';toast('Password updated');},
   filter:(el)=>{state.filter=el.getAttribute('data-f');render();},
-  download:(el)=>{toast('Downloading '+el.getAttribute('data-name'));}
+  download:(el)=>downloadSample(el.dataset.id)
+};
+
+// Offline service simulations. The demo only holds synthetic records in memory.
+const viewer=()=>state.investors.find(i=>i.id===state.viewer);
+const selected=()=>state.investors.find(i=>i.id===state.detail);
+const read=id=>(document.getElementById(id)?.value||'').trim();
+const preferences=i=>(i.preferences??={posted:true,maturity:true});
+const validPw=value=>value.length>=8&&value.length<=200&&/[a-z]/i.test(value)&&/\d/.test(value);
+const demoButton=(act,label)=>'<button class="demo-btn" data-act="'+act+'">'+esc(label)+'</button>';
+const demoCard=(title,body)=>'<section class="demo-card"><h3>'+esc(title)+'</h3>'+body+'</section>';
+const demoField=(label,id,type,value)=>'<label>'+esc(label)+'<input class="demo-field" type="'+type+'" id="'+id+'" value="'+esc(value||'')+'"></label>';
+
+function demoSchedule(inv){
+  const wire=toISO(inv.wire), months=parseInt(inv.term,10);
+  const principal=Math.round(toNum(inv.principal)*100), monthly=Math.round(principal*toNum(inv.rate)/1200);
+  if(!wire||!monthly||!months)return [];
+  const end=Date.parse(toISO(calcMaturity(wire,months))), rows=[];
+  for(let due=Date.parse(wire)+30*DAY;due<=end&&rows.length<60;due+=30*DAY){
+    const iso=new Date(due).toISOString().slice(0,10);
+    rows.push({n:rows.length+1,iso,date:fmtShort(iso),cents:monthly});
+  }
+  if(rows.length)rows.at(-1).cents+=principal;
+  let next=false;
+  return rows.map(row=>{
+    const post=state.posts.find(p=>p.owner===inv.id&&p.n===row.n);
+    const status=post?'paid':next?'upcoming':'next';
+    if(!post)next=true;
+    return {...row,status,amount:fmtMoney(row.cents/100),paidDate:post?.date,ref:post?.ref};
+  });
+}
+
+// Seed the displayed payment history once so its actual dates and references persist as the demo runs.
+demoSchedule(viewer()).slice(0,14).forEach(row=>state.posts.push({owner:state.viewer,n:row.n,date:row.iso,ref:'ACH·'+(2400+row.n*7)}));
+
+function refreshCreate(){
+  const fields=['caName','caEmail','caLoginEmail','caPass'].map(id=>[id,document.getElementById(id).value]);
+  const invite=document.getElementById('demoInvite').checked;
+  render();
+  fields.forEach(([id,value])=>document.getElementById(id).value=value);
+  const checkbox=document.getElementById('demoInvite');
+  checkbox.checked=invite;checkbox.dispatchEvent(new Event('change',{bubbles:true}));
+}
+function paymentCard(inv){
+  const rows=demoSchedule(inv), unpaid=rows.filter(d=>!d.paidDate), paid=rows.filter(d=>d.paidDate);
+  if(!rows.length)return demoCard('Distribution payments','No scheduled distributions yet.');
+  const options=unpaid.map(d=>'<option value="'+d.n+'">#'+d.n+' · '+d.date+' · '+d.amount+'</option>').join('');
+  const form=unpaid.length?'<label>Scheduled distribution<select id="demoDistribution"><option value="">Choose a distribution</option>'+options+'</select></label>'+
+    demoField('Date paid','demoPaidDate','date',DEMO_DAY)+demoField('Payment reference','demoRef','text','')+demoButton('postPayment','Record payment'):'';
+  return demoCard('Distribution payments','<p>'+fmtMoney(paid.reduce((n,d)=>n+d.cents,0)/100)+' recorded across '+paid.length+' of '+rows.length+' distributions</p>'+form);
+}
+
+function pdfCard(inv){
+  const docs=state.documents.filter(d=>d.owner===inv.id);
+  const entries=docs.map(d=>'<button class="demo-btn" data-act="download" data-id="'+d.id+'">'+esc(d.name)+'</button>').join('');
+  return demoCard('Private documents','<p>'+esc(inv.name)+'</p>'+entries+
+    '<label>Document type<select id="pdfKind"><option>Statement</option><option>Summary</option><option>Tax</option><option>Agreement</option></select></label>'+
+    demoButton('attachPdf','Attach sample PDF')+'<small>The sample stays in this browser and appears in this investor’s Documents.</small>');
+}
+function downloadSample(id){
+  const doc=state.documents.find(d=>d.id===id);
+  const owner=state.mode==='team'?selected()?.id:state.viewer;
+  if(!state.auth||doc?.owner!==owner)return;
+  const a=document.createElement('a');
+  a.href='data:application/pdf;base64,JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggNzMgPj4Kc3RyZWFtCkJUIC9GMSAxOCBUZiA2MCA3MDAgVGQgKEFDRyBJbnZlc3RvciBQb3J0YWwgLSBzeW50aGV0aWMgc2FtcGxlIFBERikgVGogRVQKZW5kc3RyZWFtCmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDMxMSAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQzNAolJUVPRgo=';
+  a.download=doc.name;a.click();
+}
+const teamAccount={id:'team',email:'team@example.test'};
+function message(account,kind,text){
+  const item={id:uid(),owner:account.id,email:account.email,kind,text};
+  state.mail.unshift(item);return item;
+}
+function queueLink(account,kind){
+  state.mail.filter(m=>m.link&&m.owner===account.id).forEach(m=>m.used=true);
+  const m=message(account,kind,kind==='Invitation'?'Set your portal password.':'Choose a new portal password.');
+  m.link=true;m.expires=Date.now()+(kind==='Invitation'?48*60:30)*60000;
+}
+function demoInbox(){
+  const rows=state.mail.map(m=>{
+    const actionable=m.link&&!m.used&&Date.now()<m.expires;
+    return '<article><strong>'+esc(m.kind)+'</strong> · '+esc(m.email)+'<p>'+esc(m.text)+'</p>'+
+      (actionable?'<button class="demo-btn" data-act="openMail" data-id="'+m.id+'">Open demo link</button>':m.link?'<small>Link closed</small>':'')+'</article>';
+  }).join('');
+  return '<div class="demo-overlay" role="dialog" aria-label="Demo inbox">'+demoCard('Simulated inbox',
+    '<p>Messages stay in this browser. The demo date is June 30, 2026.</p>'+(rows||'<p>No messages yet.</p>')+
+    demoButton('reminders','Run demo maturity check')+demoButton('closeInbox','Close'))+'</div>';
+}
+function factor(){return state.mfa[state.mode==='team'?'team':state.viewer]??={enabled:false,codes:[]};}
+function issueRecoveryCodes(f){
+  f.generation=(f.generation||0)+1;
+  f.codes=['DEMO-'+f.generation+'-CODE-01','DEMO-'+f.generation+'-CODE-02'];f.showCodes=true;
+}
+function securityView(){
+  const f=factor();
+  const body=f.setup?'<p>Enter the sample authenticator code <strong>123456</strong> to confirm setup.</p>'+
+    demoField('Authenticator code','demoCode','text','')+demoButton('confirmMfa','Confirm authenticator'):
+    '<p>Authenticator app · '+(f.enabled?'Enabled':'Off')+'</p>'+
+    (f.showCodes?'<p>Save these one-use demo recovery codes. <strong>'+esc(f.codes.join(', '))+'</strong></p>'+demoButton('hideCodes','I saved these codes'):'')+
+    demoField('Demo password','demoReauth','password','demo1234')+
+    (f.enabled?demoField('Sample authenticator code (123456) or saved recovery code','demoCode','text','')+demoButton('replaceCodes','Replace recovery codes')+demoButton('disableMfa','Disable authenticator'):demoButton('startMfa','Set up authenticator'));
+  return '<div class="demo-page">'+demoCard('Security settings',body)+'</div>';
+}
+function enterDemo(role,id,verified=false){
+  if(id)state.viewer=id;
+  state.role=role;state.mode=role;state.detail=null;state.compose=null;state.iv='overview';state.tv='overview';
+  const f=factor();f.showCodes=false;f.setup=false;
+  state.auth=verified||!f.enabled;state.authFlow=state.auth?'':'challenge';render();
+}
+function authStep(){
+  if(state.authFlow==='challenge')return demoCard('Verify your sign-in','<p>Use the sample authenticator code 123456. You can also enter a saved demo recovery code.</p>'+
+    demoField('Authenticator or recovery code','demoCode','text','')+demoButton('verifyMfa','Verify')+demoButton('cancelAuth','Back to sign in'));
+  if(state.authFlow==='forgot')return demoCard('Reset your password',demoField('Login email','demoResetEmail','email',state.role==='team'?teamAccount.email:viewer().email)+
+    demoButton('requestReset','Email password link')+demoButton('cancelAuth','Back to sign in'));
+  return demoCard('Set your password',demoField('New demo password','demoNewPw','password','')+
+    demoField('Confirm password','demoConfirmPw','password','')+demoButton('useLink','Set password')+demoButton('cancelAuth','Cancel'));
+}
+const workflowActions={
+  previewInvestor:()=>enterDemo('investor',selected().id),
+  postPayment:()=>{
+    const inv=selected(),row=demoSchedule(inv).find(d=>d.n===Number(read('demoDistribution')));
+    const date=read('demoPaidDate'), ref=read('demoRef');
+    if(!row||row.paidDate||!date||date>DEMO_DAY||!ref||ref.length>120)return toast('Choose an unpaid distribution, a date on or before the demo date, and a reference.');
+    state.posts.push({owner:inv.id,n:row.n,date,ref});
+    if(inv.hasLogin&&preferences(inv).posted)message(inv,'Distribution posted','Sign in to review the recorded payment.');
+    toast('Payment recorded.');
+  },
+  attachPdf:()=>{
+    const inv=selected(),kind=read('pdfKind');
+    state.documents.push({id:uid(),owner:inv.id,kind,name:kind+' sample '+(state.documents.length+1)+'.pdf',date:fmtShort(DEMO_DAY)});
+    toast('Sample PDF attached.');
+  },
+  inbox:()=>{state.inbox=true;render();},closeInbox:()=>{state.inbox=false;render();},
+  reminders:()=>{
+    state.investors.forEach(inv=>{
+      const days=(Date.parse(toISO(inv.maturity))-Date.parse(DEMO_DAY))/DAY;
+      if(inv.hasLogin&&preferences(inv).maturity&&days>=0&&days<=90&&!state.mail.some(m=>m.kind==='Maturity reminder'&&m.owner===inv.id&&m.maturity===inv.maturity)){
+        message(inv,'Maturity reminder','Your note is approaching maturity. Sign in for the date.').maturity=inv.maturity;
+      }
+    });render();
+  },
+  emailInvite:()=>{const inv=selected();inv.hasLogin=true;queueLink(inv,'Invitation');toast('Invitation added to the demo inbox.');},
+  forgot:()=>{state.authFlow='forgot';render();},
+  requestReset:()=>{
+    const email=read('demoResetEmail').toLowerCase();
+    const account=email===teamAccount.email?teamAccount:state.investors.find(i=>i.hasLogin&&i.email.toLowerCase()===email);
+    if(account)queueLink(account,'Password reset');
+    state.authFlow='';toast('If that demo login exists, a link is in the demo inbox.');
+  },
+  openMail:el=>{
+    const m=state.mail.find(m=>m.id===el.dataset.id&&m.link&&!m.used&&m.expires>Date.now());
+    if(!m)return toast('This link has expired.');
+    state.openLink=m;state.inbox=false;state.auth=false;state.authFlow='set';render();
+  },
+  useLink:()=>{
+    const m=state.openLink;
+    if(!m||m.used||m.expires<=Date.now())return toast('This link has expired.');
+    if(!validPw(read('demoNewPw'))||read('demoNewPw')!==read('demoConfirmPw'))return toast('Enter matching passwords of 8–200 characters with letters and numbers.');
+    m.used=true;state.openLink=null;state.role=m.owner==='team'?'team':'investor';
+    if(m.owner!=='team')state.viewer=m.owner;
+    state.authFlow='';toast('Demo password set. Sign in to continue.');
+  },
+  cancelAuth:()=>{state.openLink=null;state.authFlow='';render();},
+  startMfa:()=>{if(read('demoReauth')!=='demo1234')return toast('Use the prefilled demo password.');factor().setup=true;render();},
+  confirmMfa:()=>{
+    if(read('demoCode')!=='123456')return toast('Enter the sample six-digit code.');
+    Object.assign(factor(),{enabled:true,setup:false});issueRecoveryCodes(factor());render();
+  },
+  replaceCodes:()=>{
+    if(read('demoReauth')!=='demo1234'||read('demoCode')!=='123456')return toast('Confirm the demo password and current code.');
+    issueRecoveryCodes(factor());render();
+  },
+  hideCodes:()=>{factor().showCodes=false;render();},
+  disableMfa:()=>{if(read('demoReauth')!=='demo1234'||(read('demoCode')!=='123456'&&!factor().codes.includes(read('demoCode'))))return toast('Confirm the demo password and code.');Object.assign(factor(),{enabled:false,codes:[],showCodes:false});render();},
+  verifyMfa:()=>{
+    const f=factor(), code=read('demoCode'), recovery=f.codes.indexOf(code);
+    if(code!=='123456'&&recovery<0)return toast('Enter the demo authenticator code or an unused recovery code.');
+    if(recovery>=0)f.codes.splice(recovery,1);
+    enterDemo(state.role,state.viewer,true);
+  }
 };
 
 // event delegation
 document.getElementById('app').addEventListener('click',function(e){
   var el=e.target.closest('[data-act]');if(!el)return;var act=el.getAttribute('data-act');
-  if(H[act]){e.preventDefault();H[act](el);}
+  const handler=H[act]||workflowActions[act];
+  if(handler){e.preventDefault();handler(el);}
 });
 // live recompute of auto-populated note-term fields (no re-render → keeps input focus)
 function onTermFieldInput(e){
   var t=e.target;if(!t||!t.id)return;
+  if(t.id==='demoInvite'){document.getElementById('demoManual').hidden=t.checked;document.getElementById('demoRequire').hidden=t.checked;return;}
   if(t.id==='caPhone'){state.ca.phone=t.value;return;}
   if(/^ca(Principal|Rate|Term|Wire)$/.test(t.id)){syncFields('ca',state.ca);recomputeAuto('ca',state.ca);}
   else if(/^mn(Principal|Rate|Term|Wire)$/.test(t.id)){syncFields('mn',state.mn);recomputeAuto('mn',state.mn);}

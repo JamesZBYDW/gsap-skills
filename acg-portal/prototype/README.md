@@ -1,46 +1,12 @@
-# Interactive UI prototype
+# Interactive portal prototype
 
-`index.html` is a **single, self-contained, dependency-free** interactive
-prototype of the ACG Investor Portal & Team Console. Open it directly in any
-browser (double-click, or serve statically) — no build, no server, no network.
+Open `index.html` in a browser. The font, logo, UI and sample PDF are embedded in the file. Use synthetic information for the demo. Refreshing clears all changes.
 
-It exists so reviewers can click through the whole UI and flows before a staging
-environment is stood up.
+Choose **Investor** to see the sample note, distribution ledger, Documents and Profile. Choose **Investor Relations** to open the Team Console. The sidebar footer lets you switch roles during a walkthrough.
 
-## How to use
+- **Payments.** Open **Investors → Margaret Vance → Distribution payments**. Select a distribution, enter a payment date and reference, and record it. Switch to that demo investor to see the updated total and ledger. The final distribution includes principal. Note edits preserve each recorded installment’s position, due date and amount. The walkthrough uses June 30, 2026 as its demo date.
+- **Documents.** In the same investor detail panel, choose a document type and **Attach sample PDF**. That investor can download the included synthetic PDF from Documents. The prototype simulates private storage in memory.
+- **Email.** Create an investor with **Email an invitation** checked, use **Email password link** on an existing investor, or use **Forgot password?** at sign-in. Open the **Demo inbox** to follow the one-use link. Recording a distribution adds a simulated notice when the investor’s preference is on. **Run demo maturity check** simulates the scheduled reminder for eligible notes. Email stays in the walkthrough.
+- **Authenticator.** Open **Security** as either role. Use the prefilled demo password and the fixed sample code `123456` to enable the second step. Save the displayed demo recovery codes. Each recovery code works once at sign-in. Security settings also let you replace the codes or disable the authenticator.
 
-Open `index.html`. Credentials are prefilled — pick **Investor** or
-**Investor Relations** and click **Sign in**. You can switch between the two
-sides from the sidebar footer.
-
-You can exercise the flows:
-
-- **Investor:** one **Overview** page with the note dashboard and the full
-  distribution ledger (date, amount, status, reference); Documents (starts empty
-  until the firm issues them); update notification toggles; change your password.
-  (There is no self-registration and no in-app messaging — investors sign in with
-  credentials management issues.)
-- **Management:** portfolio overview, investor roster, and a **Create account** tab
-  where you enter an investor's details, **note terms** (principal, fixed rate, term,
-  wire-received date — the distribution amount, first distribution, maturity, and
-  status all auto-derive), and **login credentials** (email + password) in one step.
-  From an investor's detail panel you can also edit their **profile data** (name,
-  contact email, phone, banking on file, W-9 — what the investor
-  sees read-only on their Profile page), update their note terms, and reset their
-  login.
-
-## What this is — and isn't
-
-- **Is:** the exact look, layout, copy, and interaction model of the app, driven
-  by **in-browser demo data**.
-- **Isn't:** the real system. Data is in-memory and **resets on refresh** — there
-  is no backend, authentication, database, or persistence here. (For example, in
-  the prototype "Create account" and "Save note" show the intent with a toast; in
-  the live app they persist to the database, the investor's schedule is generated
-  from the entered terms, and the investor is forced to set their own password on
-  first sign-in.)
-
-The production application (Next.js on Cloudflare Workers + D1, real session
-auth, server-side authorization, audit log, and the full lifecycle) is the rest
-of `acg-portal/`. Run it locally with `npm run db:seed:local && npm run dev`, or
-deploy it with `../DEPLOY.md`.
+The [application runbook](../DEPLOY.md) covers the deployed portal.
