@@ -1,6 +1,10 @@
-# Deploying the ACG Investor Portal at portal.acgroupinc.com (Cloudflare)
+# Alternative: portal.acgroupinc.com on your own Docker server + Cloudflare Tunnel
 
-This is the production runbook. It can be followed by an engineer or handed to a
+> **Production uses Cloudflare Containers**: see `CLOUDFLARE_CONTAINERS_DEPLOY.md`.
+> This runbook is the alternative, for running the stack on a server you
+> control. Its zone settings (§4) apply to both.
+
+This runbook It can be followed by an engineer or handed to a
 coding agent (Codex, Claude Code) that has shell access to the server — the
 agent-facing rules are in `AGENTS.md`.
 

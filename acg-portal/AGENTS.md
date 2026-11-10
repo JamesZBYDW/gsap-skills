@@ -34,39 +34,59 @@ npm run test:e2e                 # needs a running, freshly seeded app on :3000
 
 ## Task: deploy to production on Cloudflare
 
-Follow `CLOUDFLARE_DEPLOY.md` top to bottom. It is written to be executed as-is.
+Production is **Cloudflare Containers + an external managed PostgreSQL**
+(chosen by James). Follow `CLOUDFLARE_CONTAINERS_DEPLOY.md`. The Worker lives in
+`cloudflare/` (its own `package.json`, `wrangler.jsonc`, tests). The Docker
+server + Tunnel setup in `CLOUDFLARE_DEPLOY.md` is the alternative.
 
 The public hostname is **`portal.acgroupinc.com`** (the `acgroupinc.com` zone is
-already on Cloudflare). Ask the human for these before starting — do not invent
-or look them up:
+already on Cloudflare). Get these from the human; do not invent them or create
+them yourself:
 
-1. Shell access to the Docker host the portal will run on.
-2. Confirmation that the Cloudflare tunnel exists and its token is already in
-   `.env.production` on the server (or have them put it there).
-3. Name and email for the first management login. Have them type the password
-   into the `create-admin` command themselves, or generate one and show it once.
+1. Approval of the Workers Paid plan (Containers need it).
+2. The managed Postgres provider/account and its connection strings (migration
+   role and runtime role). They go into the operator's terminal and
+   `wrangler secret put` prompts, never into files, chat or commits.
+3. Name and email for the first management login. The human types the password.
 
 Done means all of:
 
-- `docker compose -f docker-compose.cloudflare.yml --env-file .env.production ps`
-  shows `db` and `app` healthy and `cloudflared` running.
+- Migrations applied and the first management login created from the operator's terminal.
+- Worker secrets `DATABASE_URL`, `SESSION_SECRET`, `DOCUMENT_URL_SECRET` set.
+- Deployed via Workers Builds (or a documented fallback).
 - `curl -sI https://portal.acgroupinc.com/login` returns 200 with `strict-transport-security`.
-- A management login created with `prisma/create-admin.mjs` can sign in.
-- A database backup command has been run once and the dump file exists.
+- A cross-origin POST to `/api/auth/login` returns 403.
+- The management login works in a browser.
+
+Worker checks before pushing changes under `cloudflare/`:
+
+```bash
+cd cloudflare && npm ci && npm run typecheck && npm test
+npx wrangler deploy --dry-run --outdir dist --containers-rollout none
+```
 
 ## Hard rules
 
 - Never commit `.env`, `.env.production`, tunnel tokens, passwords, or database
   dumps. Never print secrets into logs, PRs, or chat.
 - Never run `db:seed`, `db:reset`, or `prisma migrate dev` against production.
-- Never add a `ports:` mapping to `docker-compose.cloudflare.yml` or otherwise
-  expose the app or Postgres directly; the tunnel is the only entry point, and
-  the client-IP logic in `src/lib/http.ts` depends on that.
+- Never expose the app or Postgres directly. On Containers the Worker is the
+  only entry point. On the Tunnel setup, never add a `ports:` mapping to
+  `docker-compose.cloudflare.yml`. The client-IP logic in `src/lib/http.ts`
+  depends on this.
+- `DATABASE_URL` in production must keep `sslmode=require&sslaccept=strict`
+  (`sslmode=require` alone does not verify the certificate) and must point at
+  the external managed database; the Worker and the start script refuse
+  anything else. Never put secrets in `wrangler.jsonc` or `vars`.
+- Never ship an image built with a proxy/test CA injected (sandbox builds);
+  production images come from the unmodified `Dockerfile`.
+- The Worker logs fixed categories only, never runtime error text. Keep it
+  that way.
 - Don't weaken the security headers in `next.config.mjs`, the same-origin check
   in `src/lib/http.ts`, or cookie flags in `src/lib/session.ts` to make
   something work — find the real cause.
-- Don't port the app to Workers/Pages as part of a deploy task; that is a
-  separate, deliberate project (see "Why not Workers" in `CLOUDFLARE_DEPLOY.md`).
+- Don't port the app itself to Workers/D1 as part of a deploy task. It runs
+  unchanged in the container (see "Why not Workers" in `CLOUDFLARE_DEPLOY.md`).
 - Money is integer cents; rates are basis points. No floats in stored values.
 - Every state-changing server action writes an audit record (`src/lib/audit.ts`).
   Keep that true for new ones.
@@ -81,4 +101,6 @@ Done means all of:
 | Investor view models | `src/server/portal.ts` |
 | Team view models | `src/server/team.ts` |
 | API routes | `src/app/api/**` |
-| Deploy docs | `CLOUDFLARE_DEPLOY.md` (production), `STAGING_DEPLOY.md` (staging), `DEPLOY.md` (checklist) |
+| Cloudflare Worker for Containers | `cloudflare/src/portal.ts` (logic), `cloudflare/src/index.ts` (Durable Object), `cloudflare/wrangler.jsonc` |
+| Container entrypoint | `scripts/container-start.mjs` |
+| Deploy docs | `CLOUDFLARE_CONTAINERS_DEPLOY.md` (production), `CLOUDFLARE_DEPLOY.md` (Tunnel alternative), `STAGING_DEPLOY.md` (staging), `DEPLOY.md` (checklist) |
