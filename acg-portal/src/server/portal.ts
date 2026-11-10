@@ -1,6 +1,7 @@
 import 'server-only';
-import type { InvestorState } from '@prisma/client';
-import { prisma } from '@/lib/db';
+import type { InvestorState } from '@/lib/domain';
+import { db } from '@/server/db/client';
+import { getInvestor, getNoteWithDistributions, listDocuments, getInvestorProfile } from '@/server/db/repo';
 import { formatUSD, formatRate, formatRatePrecise } from '@/lib/money';
 import { formatDate, formatDateLong, formatMonthYear, arrivalLabel, daysBetween } from '@/lib/dates';
 import { deriveStatuses, MATURITY_NOTICE_DAYS, type DistributionDisplayStatus } from '@/lib/schedule';
@@ -11,10 +12,7 @@ import { firstName, maskedAccount } from '@/lib/display';
 const CIRC = 2 * Math.PI * 50; // maturity-ring circumference (r=50)
 
 async function loadNote(investorId: string) {
-  return prisma.note.findUnique({
-    where: { investorId },
-    include: { distributions: { orderBy: { index: 'asc' } } },
-  });
+  return getNoteWithDistributions(db(), investorId);
 }
 
 // ─── A. Overview (note dashboard + full distribution ledger, one page) ──────
@@ -67,7 +65,8 @@ export interface OverviewVM {
 }
 
 export async function getOverview(investorId: string, now = new Date()): Promise<OverviewVM> {
-  const investor = await prisma.investor.findUniqueOrThrow({ where: { id: investorId } });
+  const investor = await getInvestor(db(), investorId);
+  if (!investor) throw new Error('Investor not found');
   const note = await loadNote(investorId);
 
   const base = {
@@ -178,7 +177,7 @@ export interface DocumentVM {
 }
 
 export async function getDocuments(investorId: string): Promise<DocumentVM[]> {
-  const docs = await prisma.document.findMany({ where: { investorId }, orderBy: { issuedDate: 'desc' } });
+  const docs = await listDocuments(db(), investorId);
   return docs.map((d) => ({
     id: d.id,
     name: d.name,
@@ -199,10 +198,9 @@ export interface ProfileVM {
 }
 
 export async function getProfile(investorId: string): Promise<ProfileVM> {
-  const investor = await prisma.investor.findUniqueOrThrow({
-    where: { id: investorId },
-    include: { banking: true, notifPref: true },
-  });
+  const data = await getInvestorProfile(db(), investorId);
+  if (!data) throw new Error('Investor not found');
+  const investor = { ...data.investor, banking: data.banking, notifPref: data.notifPref };
   return {
     legalName: investor.legalName,
     type: investor.type === 'ENTITY' ? 'Entity' : 'Individual',

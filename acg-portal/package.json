@@ -2,30 +2,27 @@
   "name": "acg-portal",
   "version": "1.0.0",
   "private": true,
-  "description": "ACG Investor Portal & Team Console — private two-sided portal for Amsterdam Capital Group.",
+  "description": "ACG Investor Portal & Team Console \u2014 private two-sided portal for Amsterdam Capital Group (Cloudflare Workers + D1).",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
-    "start": "next start",
+    "build": "next build",
+    "build:worker": "opennextjs-cloudflare build",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "lint": "next lint",
     "typecheck": "next typegen && tsc --noEmit",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy",
-    "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma migrate reset --force",
+    "db:migrate:local": "wrangler d1 migrations apply acg-portal-production --local",
+    "db:migrate:remote": "wrangler d1 migrations apply acg-portal-production --remote",
+    "db:seed:local": "tsx scripts/seed-local.ts",
+    "admin:create": "tsx scripts/create-admin.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "dependencies": {
-    "@node-rs/argon2": "2.0.2",
-    "@prisma/client": "6.2.1",
-    "next": "15.5.19",
+    "@opennextjs/cloudflare": "1.20.14",
+    "next": "15.5.28",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "server-only": "0.0.1",
@@ -37,11 +34,11 @@
     "@types/react": "19.0.7",
     "@types/react-dom": "19.0.3",
     "eslint": "9.18.0",
-    "eslint-config-next": "15.5.19",
-    "prisma": "6.2.1",
+    "eslint-config-next": "15.5.28",
     "tsx": "4.19.2",
     "typescript": "5.7.3",
-    "vitest": "2.1.8"
+    "vitest": "2.1.8",
+    "wrangler": "4.153.0"
   },
   "engines": {
     "node": ">=20"

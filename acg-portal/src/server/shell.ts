@@ -1,5 +1,6 @@
 import 'server-only';
-import { prisma } from '@/lib/db';
+import { db } from '@/server/db/client';
+import { getInvestor } from '@/server/db/repo';
 import { initials } from '@/lib/display';
 import { requireInvestorView, requireTeamView } from '@/lib/auth';
 import type { NavItemData, SidebarFooter } from '@/components/shell/Sidebar';
@@ -14,10 +15,8 @@ export async function getInvestorShell(
   investorId: string,
   opts: { impersonating: boolean; viewerName: string },
 ): Promise<InvestorShell> {
-  const investor = await prisma.investor.findUniqueOrThrow({
-    where: { id: investorId },
-    select: { legalName: true },
-  });
+  const investor = await getInvestor(db(), investorId);
+  if (!investor) throw new Error('Investor not found');
 
   const nav: NavItemData[] = [
     { href: '/portal/overview', label: 'Overview', icon: 'grid' },

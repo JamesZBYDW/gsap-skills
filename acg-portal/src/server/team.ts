@@ -1,6 +1,7 @@
 import 'server-only';
-import type { InvestorState } from '@prisma/client';
-import { prisma } from '@/lib/db';
+import type { InvestorState } from '@/lib/domain';
+import { db } from '@/server/db/client';
+import { listActiveNotes, listRoster } from '@/server/db/repo';
 import { formatUSD, formatCompactUSD, formatRate } from '@/lib/money';
 import { formatDate, daysBetween, startOfUTCDay, toISODate } from '@/lib/dates';
 import { investorStateLabel } from '@/lib/labels';
@@ -28,16 +29,14 @@ export interface TeamOverviewVM {
 }
 
 export async function getTeamOverview(now = new Date()): Promise<TeamOverviewVM> {
-  const activeNotes = await prisma.note.findMany({
-    where: { status: 'ACTIVE' },
-    include: { investor: { select: { id: true, legalName: true } }, distributions: { where: { paidDate: { not: null } } } },
-  });
+  const activeNotes = (await listActiveNotes(db())).map((r) => ({
+    ...r.note,
+    investor: { id: r.investorId, legalName: r.investorName },
+    paidCents: r.paidCents,
+  }));
 
   const totalCapital = activeNotes.reduce((a, n) => a + n.principalCents, 0);
-  const distributed = activeNotes.reduce(
-    (a, n) => a + n.distributions.reduce((s, d) => s + d.amountCents, 0),
-    0,
-  );
+  const distributed = activeNotes.reduce((a, n) => a + n.paidCents, 0);
 
   // Maturity dates are calendar dates (UTC midnight); compare against the start
   // of today so a note maturing today is still counted (not dropped by time-of-day).
@@ -108,10 +107,12 @@ export interface InvestorRowVM {
 const dollars = (cents: number) => String(Math.round(cents) / 100);
 
 export async function getInvestorsRoster(now = new Date()): Promise<InvestorRowVM[]> {
-  const investors = await prisma.investor.findMany({
-    orderBy: { createdAt: 'asc' },
-    include: { note: true, banking: true, user: { select: { id: true } } },
-  });
+  const investors = (await listRoster(db())).map((r) => ({
+    ...r.investor,
+    note: r.note,
+    banking: r.banking,
+    user: r.hasLogin ? { id: r.investor.userId } : null,
+  }));
   const today = startOfUTCDay(now);
   return investors.map((i) => {
     // Expired is derived, not stored: an active note past its maturity has made

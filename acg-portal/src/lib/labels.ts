@@ -1,7 +1,7 @@
 // Single source of truth for enum -> human label mappings. Pure + shared
 // between server view-models and client components.
 
-import type { InvestorState, DocumentKind } from '@prisma/client';
+import type { InvestorState, DocumentKind } from './domain';
 
 export const investorStateLabel: Record<InvestorState, string> = {
   ACTIVE: 'Active',

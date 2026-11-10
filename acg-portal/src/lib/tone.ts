@@ -1,7 +1,7 @@
 // Pill tone resolution. Tones map to the .pill--* CSS classes. Pure + shared
 // between server view-models and client components.
 
-import type { InvestorState } from '@prisma/client';
+import type { InvestorState } from './domain';
 import type { DistributionDisplayStatus } from './schedule';
 
 export type Tone = 'ok' | 'info' | 'warn' | 'mute';

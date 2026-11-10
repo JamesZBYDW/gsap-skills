@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { safeErrorSummary } from '@/server/db/d1';
 
 /** Error carrying an HTTP status; thrown by guards, caught by route wrappers. */
 export class HttpError extends Error {
@@ -26,27 +27,21 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
     if (err instanceof HttpError) {
       return errorJson(err.message, err.status);
     }
-    console.error('[api] unhandled error', err);
+    // Category only: error messages can carry SQL or bound values.
+    console.error('[api] unhandled error', safeErrorSummary(err));
     return errorJson('Something went wrong. Please try again.', 500);
   }
 }
 
 /**
- * Best-effort client IP from common proxy headers.
- *
- * Behind Cloudflare, `CF-Connecting-IP` is the one header the edge always
- * overwrites with the real visitor address; `X-Forwarded-For` is only appended
- * to, so its first entry is whatever the client sent. Prefer the former so the
- * login rate limit and audit log can't be dodged with a forged header. This
- * assumes the origin is reachable only through the proxy (see
- * CLOUDFLARE_DEPLOY.md — the tunnel setup publishes no ports).
+ * The visitor's IP, from `CF-Connecting-IP` only. On Cloudflare Workers that
+ * header is set by the edge and cannot be supplied by the visitor, unlike
+ * `X-Forwarded-For` / `X-Real-IP`, which are never trusted (a forged value
+ * must not dodge the login throttle or pollute the audit log).
  */
 export function clientIp(req: Request): string | null {
   const cf = req.headers.get('cf-connecting-ip');
-  if (cf) return cf.trim();
-  const xff = req.headers.get('x-forwarded-for');
-  if (xff) return xff.split(',')[0]!.trim();
-  return req.headers.get('x-real-ip');
+  return cf ? cf.trim() : null;
 }
 
 /**

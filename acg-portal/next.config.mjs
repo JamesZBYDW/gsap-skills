@@ -32,8 +32,6 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
-  // Standalone output produces a minimal self-contained server for Docker/AWS.
-  output: 'standalone',
   poweredByHeader: false,
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
@@ -41,3 +39,9 @@ const nextConfig = {
 };
 
 export default nextConfig;
+
+// `next dev` gets the Worker bindings (local D1) through wrangler.
+if (process.env.NODE_ENV === 'development') {
+  const { initOpenNextCloudflareForDev } = await import('@opennextjs/cloudflare');
+  initOpenNextCloudflareForDev();
+}

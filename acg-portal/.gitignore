@@ -42,3 +42,11 @@ tests-e2e/.auth/
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# cloudflare / opennext
+/.open-next/
+/.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+cloudflare-env.d.ts

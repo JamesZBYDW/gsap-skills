@@ -1,5 +1,5 @@
 import 'server-only';
-import { prisma } from './db';
+import { newId, safeErrorSummary, type D1Database, type D1PreparedStatement } from '@/server/db/d1';
 
 export type AuditAction =
   | 'AUTH_LOGIN'
@@ -7,6 +7,7 @@ export type AuditAction =
   | 'AUTH_LOGOUT'
   | 'AUTH_LOCKOUT'
   | 'AUTH_REGISTER'
+  | 'ADMIN_BOOTSTRAP'
   | 'INVESTOR_CREATE'
   | 'INVESTOR_STATE_CHANGE'
   | 'NOTE_TERMS_SET'
@@ -28,24 +29,58 @@ export interface AuditInput {
   ip?: string | null;
 }
 
+const INSERT = `INSERT INTO audit_logs (id, actor_user_id, action, target_type, target_id, metadata, ip, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+
+function values(input: AuditInput, at: number): unknown[] {
+  return [
+    newId(),
+    input.actorUserId ?? null,
+    input.action,
+    input.targetType ?? null,
+    input.targetId ?? null,
+    input.metadata ? JSON.stringify(input.metadata) : null,
+    input.ip ?? null,
+    at,
+  ];
+}
+
 /**
- * Write an immutable audit record. State changes, banking edits, approvals and
- * auth events MUST be audited (compliance — see DESIGN_HANDOFF.md "Compliance").
- * Failures are logged but never thrown back into the request path.
+ * An audit INSERT to include in a write `batch()`, so the record commits (or
+ * rolls back) together with the change it describes.
  */
-export async function audit(input: AuditInput): Promise<void> {
+export function auditStmt(database: D1Database, input: AuditInput, at = Date.now()): D1PreparedStatement {
+  return database.prepare(INSERT).bind(...values(input, at));
+}
+
+/**
+ * An audit INSERT that only takes effect when `condition` (SQL, evaluated in
+ * the same batch, before later statements) is true.
+ */
+export function auditStmtIf(
+  database: D1Database,
+  input: AuditInput,
+  condition: string,
+  conditionParams: unknown[],
+  at = Date.now(),
+): D1PreparedStatement {
+  return database
+    .prepare(
+      `INSERT INTO audit_logs (id, actor_user_id, action, target_type, target_id, metadata, ip, created_at)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${condition}`,
+    )
+    .bind(...values(input, at), ...conditionParams);
+}
+
+/**
+ * Write a standalone audit record (events with no accompanying data change,
+ * e.g. a failed login or a download). Failures are logged — by category only,
+ * never with SQL or values — and never thrown into the request path.
+ */
+export async function audit(database: D1Database, input: AuditInput): Promise<void> {
   try {
-    await prisma.auditLog.create({
-      data: {
-        action: input.action,
-        actorUserId: input.actorUserId ?? null,
-        targetType: input.targetType ?? null,
-        targetId: input.targetId ?? null,
-        metadata: (input.metadata ?? undefined) as object | undefined,
-        ip: input.ip ?? null,
-      },
-    });
+    await auditStmt(database, input).run();
   } catch (err) {
-    console.error('[audit] failed to write audit log', input.action, err);
+    console.error('[audit] failed to write audit log', input.action, safeErrorSummary(err));
   }
 }

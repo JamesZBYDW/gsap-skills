@@ -1,14 +1,16 @@
 import 'server-only';
 import { randomBytes, createHash } from 'node:crypto';
 import { cookies } from 'next/headers';
-import { prisma } from './db';
+import { db } from '@/server/db/client';
+import { newId, type D1Database, type D1PreparedStatement } from '@/server/db/d1';
+import { findSessionByTokenHash } from '@/server/db/repo';
 
 export const SESSION_COOKIE = 'acg_session';
 export const IMPERSONATE_COOKIE = 'acg_impersonate';
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 
-function sha256(value: string): string {
+export function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
@@ -25,35 +27,43 @@ function baseCookieOptions() {
   };
 }
 
-/** Create a DB-backed session and set the session cookie. Returns the token. */
-export async function createSession(
+export interface NewSession {
+  /** The opaque cookie value; only its SHA-256 hash is stored. */
+  token: string;
+  expiresAt: Date;
+  /** INSERT for the session row, to include in the login batch. */
+  statement: D1PreparedStatement;
+}
+
+/** Prepare a DB-backed session for `userId` (written by the caller's batch). */
+export function prepareSession(
+  database: D1Database,
   userId: string,
   meta: { ip?: string | null; userAgent?: string | null } = {},
-): Promise<void> {
+  at = Date.now(),
+): NewSession {
   const token = randomBytes(32).toString('base64url');
-  const tokenHash = sha256(token);
-  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+  const expiresAt = new Date(at + SESSION_TTL_MS);
+  const statement = database
+    .prepare(
+      'INSERT INTO sessions (id, token_hash, user_id, expires_at, created_at, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    )
+    .bind(newId(), sha256(token), userId, expiresAt.getTime(), at, meta.ip ?? null, meta.userAgent?.slice(0, 512) ?? null);
+  return { token, expiresAt, statement };
+}
 
-  await prisma.session.create({
-    data: {
-      tokenHash,
-      userId,
-      expiresAt,
-      ip: meta.ip ?? null,
-      userAgent: meta.userAgent ?? null,
-    },
-  });
-
+/** Set the session cookie for a session whose row has been written. */
+export async function setSessionCookie(session: Pick<NewSession, 'token' | 'expiresAt'>): Promise<void> {
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, token, { ...baseCookieOptions(), expires: expiresAt });
+  jar.set(SESSION_COOKIE, session.token, { ...baseCookieOptions(), expires: session.expiresAt });
 }
 
 /** Destroy the current session (cookie + DB row) and clear impersonation. */
-export async function destroySession(): Promise<void> {
+export async function destroySession(database: D1Database = db()): Promise<void> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (token) {
-    await prisma.session.deleteMany({ where: { tokenHash: sha256(token) } });
+    await database.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(sha256(token)).run();
   }
   jar.delete(SESSION_COOKIE);
   jar.delete(IMPERSONATE_COOKIE);
@@ -68,33 +78,35 @@ export interface SessionUser {
   mustChangePassword: boolean;
 }
 
-/** Resolve the current authenticated user from the session cookie, or null. */
-export async function getSessionUser(): Promise<SessionUser | null> {
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-  if (!token) return null;
-
-  const session = await prisma.session.findUnique({
-    where: { tokenHash: sha256(token) },
-    include: { user: { include: { investor: { select: { id: true } } } } },
-  });
-
-  if (!session || session.expiresAt < new Date()) {
-    if (session) {
-      await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
-    }
+/** Resolve the user for a session token, deleting the row if it expired. */
+export async function sessionUserForToken(
+  database: D1Database,
+  token: string,
+  now = Date.now(),
+): Promise<SessionUser | null> {
+  const session = await findSessionByTokenHash(database, sha256(token));
+  if (!session) return null;
+  if (session.expiresAt.getTime() < now) {
+    await database.prepare('DELETE FROM sessions WHERE id = ?').bind(session.sessionId).run().catch(() => {});
     return null;
   }
-
   const u = session.user;
   return {
     id: u.id,
     role: u.role,
     name: u.name,
     email: u.email,
-    investorId: u.investor?.id ?? null,
+    investorId: session.investorId,
     mustChangePassword: u.mustChangePassword,
   };
+}
+
+/** Resolve the current authenticated user from the session cookie, or null. */
+export async function getSessionUser(): Promise<SessionUser | null> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  return sessionUserForToken(db(), token);
 }
 
 /**
@@ -116,8 +128,8 @@ export async function clearImpersonation(): Promise<void> {
   jar.delete(IMPERSONATE_COOKIE);
 }
 
-/** Remove expired sessions (call from a scheduled job in production). */
-export async function pruneExpiredSessions(): Promise<number> {
-  const res = await prisma.session.deleteMany({ where: { expiresAt: { lt: new Date() } } });
-  return res.count;
+/** Remove expired sessions (call from a scheduled job). */
+export async function pruneExpiredSessions(database: D1Database = db(), now = Date.now()): Promise<number> {
+  const res = await database.prepare('DELETE FROM sessions WHERE expires_at < ?').bind(now).run();
+  return Number(res.meta.changes ?? 0);
 }
