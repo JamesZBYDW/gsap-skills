@@ -320,3 +320,196 @@ describe('management credential reset', () => {
   });
 });
 
+
+// ─── Review regressions: state must still hold at COMMIT ────────────────────
+// `beforeCommit` lands a competing change after the request has verified its
+// password/code and before its batch runs — the exact stale-read interleaving.
+
+describe('stale recovery code (checked before a regeneration commits)', () => {
+  async function setup() {
+    const u = await makeUser();
+    const t0 = Date.now() - 10 * STEP;
+    const { secret, codes } = await enroll(u.id, t0);
+    const t = t0 + 4 * STEP;
+    return { u, secret, codes, t };
+  }
+  const regenWithTotp = async (userId: string, secret: Uint8Array, t: number) =>
+    regenerateRecoveryCodes(db, keys, userId, PW, await codeAt(secret, t), null, t);
+
+  it('does not grant a session', async () => {
+    const { u, secret, codes, t } = await setup();
+    await db.prepare('UPDATE users SET failed_login_attempts = 2 WHERE id = ?').bind(u.id).run();
+    const ch = await challenge(u.id, t);
+    const r = await completeChallenge(db, keys, ch.token, codes[0]!, { ip: null }, failure, t, {
+      beforeCommit: async () => void (await regenWithTotp(u.id, secret, t)),
+    });
+    expect(r.ok).toBe(false);
+    expect(await sessionsOf(u.id)).toBe(0);
+    expect(await count('SELECT failed_login_attempts AS n FROM users WHERE id = ?', u.id)).toBe(2); // not reset
+    expect(await count("SELECT count(*) AS n FROM audit_logs WHERE actor_user_id = ? AND action IN ('AUTH_LOGIN', 'AUTH_MFA_RECOVERY_USED')", u.id)).toBe(0);
+    expect((await getMfaStatus(db, u.id)).recoveryCodesRemaining).toBe(10); // the new set is untouched
+  });
+
+  it('does not turn 2FA off', async () => {
+    const { u, secret, codes, t } = await setup();
+    await expect(
+      disableMfa(db, keys, u.id, PW, codes[0]!, null, t, { beforeCommit: async () => void (await regenWithTotp(u.id, secret, t)) }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect((await getMfaStatus(db, u.id)).enabled).toBe(true);
+    expect((await getMfaStatus(db, u.id)).recoveryCodesRemaining).toBe(10);
+    expect(await count("SELECT count(*) AS n FROM audit_logs WHERE actor_user_id = ? AND action = 'MFA_DISABLED'", u.id)).toBe(0);
+  });
+
+  it('does not regenerate: the competing set stays, and no codes are returned', async () => {
+    const { u, secret, codes, t } = await setup();
+    let winner: string[] = [];
+    const stale = regenerateRecoveryCodes(db, keys, u.id, PW, codes[0]!, null, t, {
+      beforeCommit: async () => {
+        winner = await regenWithTotp(u.id, secret, t);
+      },
+    });
+    await expect(stale).rejects.toMatchObject({ status: 409 });
+    expect(await count("SELECT count(*) AS n FROM audit_logs WHERE actor_user_id = ? AND action = 'MFA_RECOVERY_REGENERATED'", u.id)).toBe(1);
+    const ch = await challenge(u.id, t + STEP);
+    expect((await complete(ch.token, winner[3]!, t + STEP)).ok).toBe(true); // the winner's codes are the live ones
+  });
+});
+
+describe('a no-op regeneration returns nothing', () => {
+  it.each([
+    ['the password changed', async (id: string) => db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(await hashPassword('Changed2026pw'), id).run()],
+    ['the account was locked', async (id: string) => db.prepare('UPDATE users SET locked_until = ? WHERE id = ?').bind(Date.now() + 3_600_000, id).run()],
+    ['2FA was turned off', async (id: string) => db.prepare('DELETE FROM mfa_factors WHERE user_id = ?').bind(id).run()],
+  ])('when %s before commit: 409, existing codes untouched', async (_label, change) => {
+    const u = await makeUser();
+    const t0 = Date.now() - 10 * STEP;
+    const { secret } = await enroll(u.id, t0);
+    const t = t0 + 4 * STEP;
+    const before = (await db.prepare('SELECT code_hash FROM mfa_recovery_codes WHERE user_id = ? ORDER BY code_hash').bind(u.id).all()).results;
+    expect(before).toHaveLength(10); // an existing row count of 10 must not be mistaken for success
+    await expect(
+      regenerateRecoveryCodes(db, keys, u.id, PW, await codeAt(secret, t), null, t, { beforeCommit: async () => void (await change(u.id)) }),
+    ).rejects.toMatchObject({ status: 409 });
+    const after = (await db.prepare('SELECT code_hash FROM mfa_recovery_codes WHERE user_id = ? ORDER BY code_hash').bind(u.id).all()).results;
+    expect(after).toEqual(before);
+    expect(await count("SELECT count(*) AS n FROM audit_logs WHERE actor_user_id = ? AND action = 'MFA_RECOVERY_REGENERATED'", u.id)).toBe(0);
+  });
+});
+
+describe('enrollment is bound to the credentials just verified', () => {
+  it.each([
+    ['a password change', async (id: string) => db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(await hashPassword('Changed2026pw'), id).run()],
+    ['a lockout', async (id: string) => db.prepare('UPDATE users SET locked_until = ? WHERE id = ?').bind(Date.now() + 3_600_000, id).run()],
+  ])('%s between the password check and the write: nothing is stored', async (_label, change) => {
+    const u = await makeUser();
+    await expect(
+      startEnrollment(db, keys, u.id, PW, null, Date.now(), { beforeCommit: async () => void (await change(u.id)) }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(await count('SELECT count(*) AS n FROM mfa_factors WHERE user_id = ?', u.id)).toBe(0);
+    expect(await count("SELECT count(*) AS n FROM audit_logs WHERE actor_user_id = ? AND action = 'MFA_ENROLL_STARTED'", u.id)).toBe(0);
+  });
+
+  it.each([
+    ['password', async (id: string) => db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(await hashPassword('Changed2026pw'), id).run()],
+    ['login email', async (id: string) => db.prepare('UPDATE users SET email = ? WHERE id = ?').bind(`changed-${id}@test.example`, id).run()],
+  ])('a %s change discards a pending (unverified) enrollment', async (_label, change) => {
+    const u = await makeUser();
+    const t = Date.now();
+    const start = await startEnrollment(db, keys, u.id, PW, null, t);
+    await change(u.id);
+    expect(await count('SELECT count(*) AS n FROM mfa_factors WHERE user_id = ?', u.id)).toBe(0);
+    await expect(confirmEnrollment(db, keys, u.id, await codeAt(base32Decode(start.secret), t), null, t)).rejects.toMatchObject({ status: 409 });
+    expect((await getMfaStatus(db, u.id)).enabled).toBe(false);
+  });
+
+  it('a password or email change keeps an ENABLED factor and closes open challenges', async () => {
+    const u = await makeUser();
+    const t0 = Date.now() - 10 * STEP;
+    await enroll(u.id, t0);
+    await challenge(u.id, t0 + 4 * STEP);
+    await db.prepare('UPDATE users SET password_hash = ?, email = ? WHERE id = ?').bind(await hashPassword('Changed2026pw'), `kept-${u.id}@test.example`, u.id).run();
+    expect((await getMfaStatus(db, u.id)).enabled).toBe(true);
+    expect((await getMfaStatus(db, u.id)).recoveryCodesRemaining).toBe(10);
+    expect(await count('SELECT count(*) AS n FROM mfa_challenges WHERE user_id = ?', u.id)).toBe(0);
+  });
+
+  it('unrelated user updates (name, counters) leave a pending enrollment alone', async () => {
+    const u = await makeUser();
+    await startEnrollment(db, keys, u.id, PW, null, Date.now());
+    await db.prepare('UPDATE users SET name = ?, failed_login_attempts = 1 WHERE id = ?').bind('Renamed', u.id).run();
+    expect(await count('SELECT count(*) AS n FROM mfa_factors WHERE user_id = ?', u.id)).toBe(1);
+  });
+});
+
+// A recovery code is only consumed by a batch that can actually succeed.
+describe('recovery codes are never burned by an attempt that cannot succeed', () => {
+  const unused = (id: string) => count('SELECT count(*) AS n FROM mfa_recovery_codes WHERE user_id = ? AND used_at IS NULL', id);
+
+  it.each([
+    ['a password reset', async (id: string) => db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(await hashPassword(PW + 'x'), id).run(), PW + 'x'],
+    ['a lockout', async (id: string) => db.prepare('UPDATE users SET locked_until = ? WHERE id = ?').bind(Date.now() + 60_000, id).run(), PW],
+    ['the challenge being removed', async (id: string) => db.prepare('DELETE FROM mfa_challenges WHERE user_id = ?').bind(id).run(), PW],
+  ])('sign-in: %s before commit → no session, code still valid on a fresh challenge', async (_label, change, _pw) => {
+    const u = await makeUser();
+    const t = Date.now();
+    const { codes } = await enroll(u.id, t - 10 * STEP);
+    const stale = await challenge(u.id, t);
+    const r = await completeChallenge(db, keys, stale.token, codes[0]!, { ip: null }, failure, t, {
+      beforeCommit: async () => void (await change(u.id)),
+    });
+    expect(r.ok).toBe(false);
+    expect(await sessionsOf(u.id)).toBe(0);
+    expect(await unused(u.id)).toBe(10); // nothing consumed
+
+    // Clear the lock (if any) and use the SAME code with a fresh challenge.
+    await db.prepare('UPDATE users SET locked_until = NULL WHERE id = ?').bind(u.id).run();
+    const fresh = await challenge(u.id, t);
+    expect(await complete(fresh.token, codes[0]!, t)).toMatchObject({ ok: true, method: 'recovery' });
+    expect(await unused(u.id)).toBe(9);
+  });
+
+  it('a stale challenge (password reset before the code is entered) leaves the code usable', async () => {
+    const u = await makeUser();
+    const t = Date.now();
+    const { codes } = await enroll(u.id, t - 10 * STEP);
+    const stale = await challenge(u.id, t);
+    await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(await hashPassword('Reset2026pass'), u.id).run();
+    expect((await complete(stale.token, codes[0]!, t)).ok).toBe(false);
+    expect(await unused(u.id)).toBe(10);
+    const fresh = await challenge(u.id, t);
+    expect((await complete(fresh.token, codes[0]!, t)).ok).toBe(true);
+  });
+
+  it.each([
+    ['turning 2FA off', (id: string, code: string, t: number, hooks: { beforeCommit: () => Promise<void> }) => disableMfa(db, keys, id, PW, code, null, t, hooks)],
+    ['regenerating codes', (id: string, code: string, t: number, hooks: { beforeCommit: () => Promise<void> }) => regenerateRecoveryCodes(db, keys, id, PW, code, null, t, hooks)],
+  ])('settings: %s that fails at commit does not consume the code', async (_label, mutate) => {
+    const u = await makeUser();
+    const t = Date.now();
+    const { codes } = await enroll(u.id, t - 10 * STEP);
+    await expect(
+      mutate(u.id, codes[0]!, t, { beforeCommit: async () => void (await db.prepare('UPDATE users SET locked_until = ? WHERE id = ?').bind(Date.now() + 60_000, u.id).run()) }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(await unused(u.id)).toBe(10);
+    expect((await getMfaStatus(db, u.id)).enabled).toBe(true);
+    // Wrong password / wrong code are rejected before any write, too.
+    await db.prepare('UPDATE users SET locked_until = NULL WHERE id = ?').bind(u.id).run();
+    await expect(mutate(u.id, codes[0]!, t, { beforeCommit: async () => {} }).then(() => 'ok')).resolves.toBe('ok');
+  });
+
+  it('two requests in the same millisecond cannot both use one code', async () => {
+    const u = await makeUser();
+    const t = Date.now();
+    const { codes } = await enroll(u.id, t - 10 * STEP);
+    const a = await challenge(u.id, t);
+    const b = await challenge(u.id, t);
+    // B checks the code, then A commits fully, then B commits with the same `now`.
+    const rb = await completeChallenge(db, keys, b.token, codes[0]!, { ip: null }, failure, t, {
+      beforeCommit: async () => {
+        expect((await complete(a.token, codes[0]!, t)).ok).toBe(true);
+      },
+    });
+    expect(rb.ok).toBe(false);
+    expect(await sessionsOf(u.id)).toBe(1);
+  });
+});

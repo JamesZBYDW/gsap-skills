@@ -43,12 +43,26 @@ CREATE INDEX mfa_challenges_expires_at ON mfa_challenges (expires_at);
 
 -- Single-use ledger. A UNIQUE violation aborts the whole batch, so a challenge,
 -- a TOTP time step or a recovery code can be consumed exactly once, even under
--- concurrent requests.
+-- concurrent requests (a recovery code is single-use through its own used_at).
+-- 'op' rows are per-request markers proving a guarded step took effect inside
+-- its batch.
 CREATE TABLE mfa_spent (
   user_id     TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-  kind        TEXT NOT NULL CHECK (kind IN ('challenge', 'totp', 'recovery')),
+  kind        TEXT NOT NULL CHECK (kind IN ('challenge', 'totp', 'op')),
   value       TEXT NOT NULL,
   created_at  INTEGER NOT NULL,
   PRIMARY KEY (user_id, kind, value)
 );
 CREATE INDEX mfa_spent_created_at ON mfa_spent (created_at);
+
+-- A password or login-email change ends anything half-finished that was tied
+-- to the old credentials: an enrollment that was started but not verified, and
+-- any open sign-in challenge. An ENABLED factor is kept, so a credential reset
+-- can never remove the second factor.
+CREATE TRIGGER mfa_invalidate_pending_on_credential_change
+AFTER UPDATE OF password_hash, email ON users
+WHEN OLD.password_hash IS NOT NEW.password_hash OR OLD.email IS NOT NEW.email
+BEGIN
+  DELETE FROM mfa_factors WHERE user_id = NEW.id AND enabled_at IS NULL;
+  DELETE FROM mfa_challenges WHERE user_id = NEW.id;
+END;
