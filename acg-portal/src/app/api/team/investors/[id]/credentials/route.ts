@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { handle, json, errorJson, clientIp, assertSameOrigin } from '@/lib/http';
-import { apiRequireTeam } from '@/lib/auth';
+import { apiRequireTeamWrite } from '@/lib/team-write';
 import { credentialsSchema } from '@/lib/validation';
 import { provisionCredentials } from '@/server/lifecycle';
 
@@ -8,7 +8,7 @@ import { provisionCredentials } from '@/server/lifecycle';
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   return handle(async () => {
     assertSameOrigin(req);
-    const user = await apiRequireTeam();
+    const user = await apiRequireTeamWrite();
     const { id } = await ctx.params;
     const parsed = credentialsSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return errorJson(parsed.error.issues[0]?.message ?? 'Invalid input.', 400);

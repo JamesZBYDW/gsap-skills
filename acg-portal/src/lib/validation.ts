@@ -111,6 +111,7 @@ export const createAccountSchema = z.object({
   loginEmail: z.string().email('Enter a valid login email.').max(320).optional(),
   password: passwordField,
   mustChange: z.boolean().optional().default(true),
+  sendInvite: z.boolean().optional(),
   // Note terms (amount, first distribution, maturity, and status are derived
   // server-side from these + the wire-received date).
   principal: principalCentsField,

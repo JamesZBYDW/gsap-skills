@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { api, ApiError } from '@/lib/api-client';
 import logoCream from '../../../public/acg-logo-cream.png';
 
@@ -82,8 +83,8 @@ export function AuthGate({ defaultEmail }: { defaultEmail?: string }) {
           </button>
 
           <div style={{ marginTop: 18, fontSize: '.76rem', color: '#9fb0cc', lineHeight: 1.5, textAlign: 'center' }}>
-            Access is by invitation. Investor Relations creates your account and provides your
-            initial email &amp; password — you&apos;ll set your own password on first sign-in.
+            <Link href="/forgot-password" style={{ color: '#dae5fa' }}>Forgot password?</Link>
+            <p>Investor Relations provides access to your portal.</p>
           </div>
           <div style={{ textAlign: 'center', marginTop: 14, fontSize: '.7rem', color: '#6c7a93' }}>
             Returns are fixed for the term — not guaranteed.

@@ -148,6 +148,7 @@ test('management creates an account; investor is forced to set a password, then 
   await expect(page.getByTestId('ca-status')).toHaveValue('Active');
   // Login email defaults to the contact email; keep "require change" checked.
   // The UI gate matches the server policy: 7 characters keeps Create disabled.
+  await page.getByTestId('ca-send-invite').uncheck();
   await page.getByTestId('ca-password').fill(issued.slice(0, 7));
   await expect(page.getByTestId('ca-submit')).toBeDisabled();
   await page.getByTestId('ca-password').fill(issued);

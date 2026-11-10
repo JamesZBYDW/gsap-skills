@@ -58,18 +58,18 @@ account, and out-of-band contact (email/phone) is used for anything conversation
   read-only on their Profile page — identity, phone, banking on file (recorded
   after the phone confirmation compliance requires) — is
   entered at creation or edited later from the investor's detail panel.
-- **Investor logins are provisioned by management** (from Create account, or later
-  from an investor's detail panel): a login email + an initial password (or a
-  generated one), hashed and persisted for real sign-in. On their **first sign-in**
-  the investor is **forced to set their own password** before they can enter the
-  portal; they can change it again anytime in Profile.
+- **Investor invitations.** Create account defaults to emailing a 48-hour setup link to the login address. The investor chooses a password, then signs in. Staff can send a fresh link from investor detail. Manual initial passwords are also available.
+- **Payments.** In Investors, open a record, choose a scheduled distribution, and enter the actual payment date and reference. The investor sees the recorded payment and the portfolio totals update. The amount comes from the selected distribution, including principal on the final one. Bank transfers happen outside the portal.
+- **Documents.** In the same detail panel, choose the document type and upload a PDF up to 10 MiB. Its owner can download the original file in Documents. Files are kept in a private R2 bucket.
+- **Email.** Forgot password emails a 30-minute link. Completing a password change invalidates outstanding links. Resetting by email also ends existing sessions. The Worker sends payment and 90-day maturity notices according to the investor’s Profile preferences.
+- **Two-factor authentication.** In Security, staff and investors can enroll an authenticator app, confirm the first code, and save their one-use recovery codes. Future sign-ins require the second factor for enrolled accounts.
 - **Management enters four things** — principal, fixed rate, term (1 / 1.5 / 2 /
   3 years), and the **wire-received date**. Everything else derives: the
   per-distribution amount (principal × rate ÷ 12), the **first distribution**
   (wire + 30 days), each subsequent distribution **every 30 days**, the maturity
   date (wire + term), and the **status** — Awaiting until the wire is recorded,
   **Active** the moment it is, and **Expired** after the final distribution,
-  which also **returns the principal**. Saving regenerates the schedule, which
+  which also **returns the principal**. Saving updates the unpaid schedule while preserving recorded payments, which
   the investor sees right on their Overview.
 - **90-day expiry notice** — inside the 90-day pre-expiry window the investor's
   Overview shows a maturity notice (in place of the monthly-income tile), and

@@ -17,9 +17,11 @@ visitor ──HTTPS──▶ Cloudflare edge (portal.acgroupinc.com) ──▶ W
 | Route | custom domain `portal.acgroupinc.com` (`workers_dev` and `preview_urls` off) |
 | D1 binding | `DB` → `acg-portal-production` (`f105d819-33be-4a1e-a165-1351d135b316`) |
 | Var | `APP_URL = https://portal.acgroupinc.com` |
+| Storage | `DOCUMENTS` → private R2 bucket `acg-portal-documents-production` |
+| Email | `ACG_EMAIL` → Cloudflare Email Sending, restricted to `EMAIL_FROM` |
+| Schedule | Every minute the Worker selects eligible notices and processes queued messages |
 
-Only the `portal` hostname is used. Nothing here changes the main
-`acgroupinc.com` website or any other service in that zone.
+Portal email uses the dedicated sending domain `notify.portal.acgroupinc.com`. DNS records for this subdomain authenticate the sender. The account’s main mailbox settings are independent.
 
 ## What the app guarantees
 
@@ -53,7 +55,16 @@ Migrations live in `migrations/` and are applied before the code that needs
 them. **Never run `npm run db:seed:local` with remote flags**: it refuses them,
 and production is never seeded.
 
-### 2. Secrets
+### 2. Secrets and service bindings
+
+Provision missing secrets once. Existing installations retain their secret values across deployments. `MFA_ENCRYPTION_KEY` protects enrolled authenticators and recovery-code hashes, so replacing it requires a migration or user recovery plan.
+
+```bash
+openssl rand -base64 32 | npx wrangler secret put MFA_ENCRYPTION_KEY
+openssl rand -base64 48 | npx wrangler secret put EMAIL_LINK_SECRET
+```
+
+Use a dedicated private R2 bucket for `DOCUMENTS` and leave its public access disabled. Onboard the portal sender subdomain in Cloudflare Email Sending and check that its DNS status is ready. Turn off message-content previews for the sender domain because account emails contain private links.
 
 ```bash
 openssl rand -base64 48 | tr '+/' '-_' | tr -d '=' | npx wrangler secret put DOCUMENT_URL_SECRET
@@ -129,8 +140,12 @@ The Worker already redirects HTTP to HTTPS for this hostname, so the zone-wide
 
 ## Operations
 
+- **Email delivery.** The outbox stores the type, source event, destination, state and provider receipt. The dispatcher rechecks ownership, preferences and link validity before sending. A receipt marks provider acceptance. Check Cloudflare Email Sending activity for delivery or bounce information. If a provider acknowledgement is uncertain, reconcile against that activity before retrying.
+  ```sql
+  SELECT kind, state, result_code, count(*) FROM email_outbox GROUP BY kind, state, result_code;
+  ```
 - **Release:** migrations (step 1) → `npm run deploy` → verify (step 5).
-- **Rollback code:** `npx wrangler rollback` (Workers versions). Database
+- **Rollback code:** `npx wrangler rollback` (Workers versions). Enrolled users require an MFA-aware version on rollback. Database
   migrations are not rolled back by this. Write migrations to be
   backward-compatible with the previous release.
 - **Backups:** D1 Time Travel gives point-in-time restore
@@ -138,6 +153,7 @@ The Worker already redirects HTTP to HTTPS for this hostname, so the zone-wide
   periodic export to storage you control:
   `npx wrangler d1 export acg-portal-production --remote --output acg-<date>.sql`
   (it contains PII and password hashes; encrypt and restrict it).
+- **Private files:** Each PDF upload uses a private per-attempt object key. If storage or database acknowledgement is lost, retry using the same upload request. An object whose D1 commit status remains unknown is retained. Reconcile unreferenced objects against the documents table before removing them.
 - **Logs:** `npx wrangler tail acg-portal`, or Workers Observability in the
   dashboard.
 - **Secret rotation:** rotating `DOCUMENT_URL_SECRET` invalidates outstanding
@@ -185,17 +201,8 @@ E2E_BASE_URL=… npx playwright test   # the five browser workflows
 - [ ] Audit log retention and export procedure agreed (`audit_logs` is append-only).
 - [ ] Banking-change process: Investor Relations confirms every banking change with the investor by phone (out of band) before recording it in the investor's detail panel. The portal does not enforce that call; it's a written procedure, but every edit is audited as `BANKING_EDIT`.
 - [ ] Hostname-scoped zone settings applied (table above).
-- [ ] Email provider for password reset and investor invites (scaffolding: `password_resets` table; provisioning is a TODO).
-- [ ] 2FA for team accounts (scaffolding on `users`: `totp_secret`, `totp_enabled`).
-- [ ] Executed documents stored in access-controlled object storage (e.g. R2), served through the existing session/signed-link route; never public URLs.
 - [ ] Monitoring and alerting on Worker errors.
 
-## Production-ready vs scaffolded
+## Browser acceptance
 
-**Ready:** auth (scrypt, sessions, RBAC, atomic lockout, shared throttle,
-CSRF), the full data model and atomic lifecycle writes, server-side
-authorization on every endpoint, append-only audit logging, security
-headers/CSP, HTTPS redirect, and the complete UI.
-
-**Scaffolded:** transactional email (password reset, invites), TOTP 2FA,
-object-storage document delivery, and scheduled session pruning.
+Use a disposable local D1/R2 state directory, local `send_email` binding, and the development secrets in `.dev.vars.example`. Complete the browser suite against a loopback Wrangler server. The email tests read messages captured by Wrangler’s local email service. The payment and file tests use separate synthetic investors. Enrolling the production administrator’s authenticator is an account-owner action under **Security**.

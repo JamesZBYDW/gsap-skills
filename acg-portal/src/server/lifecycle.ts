@@ -1,5 +1,6 @@
 import 'server-only';
 import { db } from '@/server/db/client';
+import { emailLinkSecret, passwordLinkStatements } from '@/server/email/password-links';
 import { isUniqueViolation, msOrNull, newId, type D1Database, type D1PreparedStatement } from '@/server/db/d1';
 import { findUserByEmail, findUserById, getInvestor } from '@/server/db/repo';
 import {
@@ -75,10 +76,10 @@ export function planNoteTerms(input: NoteTermsInput): NoteTermsPlan {
 }
 
 /**
- * Statements that replace an investor's note terms and schedule. The schedule
- * delete and every re-insert (one bound statement per row, well under D1's
- * 100-parameter limit) run in the caller's batch, so a failure anywhere leaves
- * the previous terms and schedule untouched.
+ * Reconcile the proposed schedule in the same D1 transaction as the note.
+ * A posted payment survives when its index, due date and full amount match.
+ * If it would change or disappear, the paid-row deletion trigger aborts the
+ * batch. Unpaid rows receive new IDs so stale payment selections fail safely.
  */
 export function noteTermsStatements(
   database: D1Database,
@@ -89,6 +90,9 @@ export function noteTermsStatements(
   at = Date.now(),
 ): D1PreparedStatement[] {
   const noteIdOf = '(SELECT id FROM notes WHERE investor_id = ?)';
+  const proposed = JSON.stringify(plan.planned.map((d) => ({
+    index: d.index, due: d.dueDate.getTime(), amount: d.amountCents,
+  })));
   return [
     database.prepare('UPDATE investors SET state = ?, updated_at = ? WHERE id = ?').bind(plan.status, at, investorId),
     database
@@ -124,11 +128,26 @@ export function noteTermsStatements(
         at,
         at,
       ),
-    database.prepare(`DELETE FROM distributions WHERE note_id = ${noteIdOf}`).bind(investorId),
+    database.prepare(
+      `DELETE FROM distributions AS d
+       WHERE d.note_id = ${noteIdOf}
+         AND (d.paid_date IS NULL OR NOT EXISTS (
+           SELECT 1 FROM json_each(?) AS p
+           WHERE d.idx = json_extract(p.value, '$.index')
+             AND d.due_date = json_extract(p.value, '$.due')
+             AND d.amount_cents = json_extract(p.value, '$.amount')
+         ))`,
+    ).bind(investorId, proposed),
     ...plan.planned.map((d) =>
       database
-        .prepare(`INSERT INTO distributions (id, note_id, idx, due_date, amount_cents) VALUES (?, ${noteIdOf}, ?, ?, ?)`)
-        .bind(newId(), investorId, d.index, d.dueDate.getTime(), d.amountCents),
+        .prepare(
+          `INSERT INTO distributions (id, note_id, idx, due_date, amount_cents)
+           SELECT ?, n.id, ?, ?, ? FROM notes AS n
+           WHERE n.investor_id = ? AND NOT EXISTS (
+             SELECT 1 FROM distributions AS d WHERE d.note_id = n.id AND d.idx = ? AND d.paid_date IS NOT NULL
+           )`,
+        )
+        .bind(newId(), d.index, d.dueDate.getTime(), d.amountCents, investorId, d.index),
     ),
     auditStmt(
       database,
@@ -166,7 +185,14 @@ export async function setNoteTerms(
   if (!(await getInvestor(database, investorId))) throw new HttpError(404, 'Investor not found.');
   const plan = planNoteTerms(input);
   // The note's foreign key also rejects an investor deleted in between.
-  await database.batch(noteTermsStatements(database, investorId, plan, actorUserId, ip));
+  try {
+    await database.batch(noteTermsStatements(database, investorId, plan, actorUserId, ip));
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('posted distribution is locked')) {
+      throw new HttpError(409, 'These terms would change or remove a recorded distribution. Keep its distribution number, due date and amount, including any returned principal.');
+    }
+    throw err;
+  }
 }
 
 // ─── Credentials ─────────────────────────────────────────────────────────────
@@ -290,6 +316,9 @@ export async function createInvestorAccount(
     ...noteTermsStatements(database, investorId, plan, actorUserId, ip, at),
     ...credentialStatements(database, investorId, { loginEmail, passwordHash, mustChange: !!input.mustChange }, actorUserId, ip, at),
   ];
+  if (input.sendInvite) {
+    statements.push(...passwordLinkStatements(database, loginEmail, 'invite', emailLinkSecret(), at, investorId, actorUserId));
+  }
 
   try {
     await database.batch(statements);

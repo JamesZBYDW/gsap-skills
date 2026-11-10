@@ -270,37 +270,16 @@ const mapDocument = (r: Row): Document => ({
 
 export async function listDocuments(database: D1Database, investorId: string): Promise<Document[]> {
   const { results } = await database
-    .prepare('SELECT * FROM documents WHERE investor_id = ? ORDER BY issued_date DESC, rowid DESC')
+    .prepare("SELECT * FROM documents WHERE investor_id = ? AND storage_key <> '' ORDER BY issued_date DESC, rowid DESC")
     .bind(investorId)
     .all<Row>();
   return results.map(mapDocument);
 }
 
-export interface DocumentForDownload {
-  document: Document;
-  investorName: string;
-  note: Pick<Note, 'principalCents' | 'rateBps' | 'termMonths'> | null;
-}
-
-export async function getDocumentForDownload(database: D1Database, id: string): Promise<DocumentForDownload | null> {
+export async function getDocumentForDownload(database: D1Database, id: string): Promise<Document | null> {
   const r = await database
-    .prepare(
-      `SELECT d.*, i.legal_name AS inv_name,
-              n.principal_cents AS n_principal_cents, n.rate_bps AS n_rate_bps, n.term_months AS n_term_months
-       FROM documents d
-       JOIN investors i ON i.id = d.investor_id
-       LEFT JOIN notes n ON n.investor_id = d.investor_id
-       WHERE d.id = ?`,
-    )
+    .prepare("SELECT * FROM documents WHERE id = ? AND storage_key <> ''")
     .bind(id)
     .first<Row>();
-  if (!r) return null;
-  return {
-    document: mapDocument(r),
-    investorName: str(r.inv_name),
-    note:
-      r.n_principal_cents === null || r.n_principal_cents === undefined
-        ? null
-        : { principalCents: num(r.n_principal_cents), rateBps: num(r.n_rate_bps), termMonths: num(r.n_term_months) },
-  };
+  return r ? mapDocument(r) : null;
 }

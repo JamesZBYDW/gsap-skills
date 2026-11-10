@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { InvestorRowVM } from '@/server/team';
 import { Pill } from '@/components/ui/Pill';
+import { TeamDocuments } from '@/components/team/TeamDocuments';
+import { TeamPayments } from '@/components/team/TeamPayments';
 import { SlideOver } from '@/components/ui/SlideOver';
 import { Icon } from '@/components/Icon';
 import { api, ApiError } from '@/lib/api-client';
@@ -178,6 +180,18 @@ function InvestorDetail({
     }
   }
 
+  async function emailPasswordLink() {
+    setCredBusy(true);
+    try {
+      await api.post(`/api/team/investors/${investor.id}/password-link`);
+      toast('Password link queued for the investor’s current login email.');
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not queue password link.');
+    } finally {
+      setCredBusy(false);
+    }
+  }
+
   async function impersonate() {
     try {
       const res = await api.post<{ redirectTo: string }>('/api/team/impersonate', { investorId: investor.id });
@@ -280,9 +294,12 @@ function InvestorDetail({
         </div>
       </div>
 
+      <TeamPayments investorId={investor.id} />
+      <TeamDocuments investorId={investor.id} />
       <div className="card" style={{ padding: '18px 20px' }}>
         <div className="tileEyebrow">INVESTOR LOGIN</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
+          {investor.hasLogin && <button type="button" className="btnNeutral" disabled={credBusy} onClick={emailPasswordLink}>Email password link to current login</button>}
           <Field label="LOGIN EMAIL"><input className="fieldLight" data-testid="cred-email" value={loginEmail} onChange={(x) => setLoginEmail(x.target.value)} /></Field>
           <Field label="INITIAL PASSWORD">
             <div style={{ display: 'flex', gap: 8 }}>

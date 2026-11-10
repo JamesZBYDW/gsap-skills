@@ -84,7 +84,7 @@ export function daysBetween(a: Date, b: Date): number {
 /** "Arrives today" / "Arrives tomorrow" / "Arrives in 6 days" (future only). */
 export function arrivalLabel(due: Date, now: Date): string {
   const d = daysBetween(now, due);
-  if (d < 0) return `Posted ${formatDate(due)}`;
+  if (d < 0) return 'Past due';
   if (d === 0) return 'Arrives today';
   if (d === 1) return 'Arrives tomorrow';
   return `Arrives in ${d} days`;

@@ -1,5 +1,5 @@
 import 'server-only';
-import type { InvestorState } from '@/lib/domain';
+import type { Document, InvestorState } from '@/lib/domain';
 import { db } from '@/server/db/client';
 import { getInvestor, getNoteWithDistributions, listDocuments, getInvestorProfile } from '@/server/db/repo';
 import { formatUSD, formatRate, formatRatePrecise } from '@/lib/money';
@@ -29,6 +29,7 @@ export interface LedgerRowVM {
   tone: Tone;
   status: DistributionDisplayStatus;
   ref: string;
+  paidDate: string | null;
 }
 
 export interface OverviewVM {
@@ -97,7 +98,9 @@ export async function getOverview(investorId: string, now = new Date()): Promise
   }
 
   const statuses = deriveStatuses(note.distributions);
-  const paidCount = note.distributions.filter((d) => d.paidDate).length;
+  const paid = note.distributions.filter((d) => d.paidDate);
+  const paidCount = paid.length;
+  const paidCents = paid.reduce((sum, distribution) => sum + distribution.amountCents, 0);
   const next = note.distributions.find((d) => statuses.get(d.index) === 'NEXT') ?? null;
   const term = note.termMonths;
   // Progress and counts are over the actual generated schedule length, which may
@@ -148,7 +151,7 @@ export async function getOverview(investorId: string, now = new Date()): Promise
           paidLabel: `${paidCount} of ${total} distributions paid`,
         }
       : null,
-    distributed: { amount: formatUSD(paidCount * note.monthlyAmountCents), count: `${paidCount} of ${total}` },
+    distributed: { amount: formatUSD(paidCents), count: `${paidCount} of ${total}` },
     bars: note.distributions.map((d) => ({ status: statuses.get(d.index)! })),
     termRangeStart: formatMonthYear(note.distributions[0]!.dueDate),
     termRangeEnd: formatMonthYear(note.distributions[note.distributions.length - 1]!.dueDate),
@@ -162,6 +165,7 @@ export async function getOverview(investorId: string, now = new Date()): Promise
         tone: distributionTone(status),
         status,
         ref: d.reference ?? '—',
+        paidDate: d.paidDate ? formatDate(d.paidDate) : null,
       };
     }),
   };
@@ -176,14 +180,12 @@ export interface DocumentVM {
   date: string;
 }
 
+export function toDocumentVM(doc: Document): DocumentVM {
+  return { id: doc.id, name: doc.name, kindLabel: documentKindLabel[doc.kind], date: formatDate(doc.issuedDate) };
+}
+
 export async function getDocuments(investorId: string): Promise<DocumentVM[]> {
-  const docs = await listDocuments(db(), investorId);
-  return docs.map((d) => ({
-    id: d.id,
-    name: d.name,
-    kindLabel: documentKindLabel[d.kind],
-    date: formatDate(d.issuedDate),
-  }));
+  return (await listDocuments(db(), investorId)).map(toDocumentVM);
 }
 
 // ─── F. Profile ─────────────────────────────────────────────────────────────

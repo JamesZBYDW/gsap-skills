@@ -49,14 +49,14 @@ export function DocumentsView({ documents }: { documents: DocumentVM[] }) {
               >
                 <Icon name="file" size={17} />
               </span>
-              <span style={{ fontSize: '.88rem', fontWeight: 600 }}>{d.name}</span>
+              <span style={{ fontSize: '.88rem', fontWeight: 600, overflowWrap: 'anywhere' }}>{d.name}</span>
             </div>
             <div>
               <span className="kindPill">{d.kindLabel}</span>
             </div>
             <div style={{ fontSize: '.84rem', color: '#5b6473' }}>{d.date}</div>
             <div style={{ textAlign: 'right' }}>
-              <a className="iconBtn" href={`/api/documents/${d.id}/download`} download>
+              <a className="iconBtn" href={`/api/documents/${d.id}/download`} aria-label={'Download ' + d.name} download>
                 <Icon name="download" size={17} />
               </a>
             </div>

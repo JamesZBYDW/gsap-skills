@@ -1,5 +1,5 @@
 // ACG Investor Portal — Cloudflare Workers (OpenNext) + D1.
-// Secrets (DOCUMENT_URL_SECRET) are Worker secrets set with
+// Signing and encryption secrets are Worker secrets set with
 // `wrangler secret put` — never in this file. Runbook: DEPLOY.md
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -25,9 +25,13 @@
     }
   ],
 
+  "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "acg-portal-documents-production" }],
+  "send_email": [{ "name": "ACG_EMAIL", "allowed_sender_addresses": ["notifications@notify.portal.acgroupinc.com"] }],
+  "triggers": { "crons": ["* * * * *"] },
   "vars": {
+    "EMAIL_FROM": "notifications@notify.portal.acgroupinc.com",
     "APP_URL": "https://portal.acgroupinc.com"
   },
 
-  "observability": { "enabled": true }
+  "observability": { "enabled": true, "redact_query_string": true }
 }

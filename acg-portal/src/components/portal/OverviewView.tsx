@@ -181,6 +181,7 @@ export function OverviewView({ vm }: { vm: OverviewVM }) {
             <div style={{ fontSize: '.88rem', fontWeight: 700 }}>{row.amount}</div>
             <div>
               <Pill tone={row.tone}>{row.statusLabel}</Pill>
+              {row.paidDate && <div className="tileSub">{row.paidDate}</div>}
             </div>
             <div style={{ fontSize: '.8rem', color: '#9aa1ad' }} className="mono">
               {row.ref}

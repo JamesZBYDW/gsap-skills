@@ -6,3 +6,6 @@ DOCUMENT_URL_SECRET="dev-only-document-url-secret-change-me-0123456789"
 # base64. Production: openssl rand -base64 32 | npx wrangler secret put MFA_ENCRYPTION_KEY
 # This value is for LOCAL development only.
 MFA_ENCRYPTION_KEY="YWNnLXBvcnRhbC1sb2NhbC1kZXYtbWZhLWtleS0wMDA"
+
+# Local fixture only. Generate a separate secret in the live environment.
+EMAIL_LINK_SECRET="dev-only-email-link-secret-change-me-0123456789"

@@ -7,10 +7,13 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { getPlatformProxy } from 'wrangler';
 import type { D1Database } from '@/server/db/d1';
+import type { DocumentBucket } from '@/server/document-storage';
 
 const root = resolve(__dirname, '..', '..');
 
-export async function freshD1(): Promise<{ db: D1Database; dispose: () => Promise<void> }> {
+type TestDocumentBucket = DocumentBucket & { list(): Promise<{ objects: { key: string }[] }> };
+
+export async function freshD1(): Promise<{ db: D1Database; bucket: TestDocumentBucket; dispose: () => Promise<void> }> {
   const dir = mkdtempSync(join(tmpdir(), 'acg-d1-test-'));
   const r = spawnSync(
     'npx',
@@ -18,12 +21,13 @@ export async function freshD1(): Promise<{ db: D1Database; dispose: () => Promis
     { cwd: root, encoding: 'utf8' },
   );
   if (r.status !== 0) throw new Error(`migrations failed: ${r.stderr}`);
-  const proxy = await getPlatformProxy<{ DB: D1Database }>({
+  const proxy = await getPlatformProxy<{ DB: D1Database; DOCUMENTS: TestDocumentBucket }>({
     configPath: join(root, 'wrangler.jsonc'),
     persist: { path: join(dir, 'v3') },
   });
   return {
     db: proxy.env.DB,
+    bucket: proxy.env.DOCUMENTS,
     dispose: async () => {
       await proxy.dispose();
       rmSync(dir, { recursive: true, force: true });

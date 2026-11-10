@@ -33,6 +33,7 @@ export function CreateAccountView() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginTouched, setLoginTouched] = useState(false);
   const [password, setPassword] = useState('');
+  const [sendInvite, setSendInvite] = useState(true);
   const [mustChange, setMustChange] = useState(true);
 
   const [busy, setBusy] = useState(false);
@@ -55,7 +56,7 @@ export function CreateAccountView() {
     setPassword(p + '2a');
   }
 
-  const canSubmit = name.trim().length >= 2 && email.includes('@') && password.length >= PASSWORD_MIN_LENGTH && !busy;
+  const canSubmit = name.trim().length >= 2 && email.includes('@') && (sendInvite || password.length >= PASSWORD_MIN_LENGTH) && !busy;
 
   async function submit() {
     setBusy(true);
@@ -66,14 +67,15 @@ export function CreateAccountView() {
         phone,
         type,
         loginEmail: effectiveLoginEmail || undefined,
-        password,
+        password: sendInvite ? undefined : password,
+        sendInvite,
         mustChange,
         principal,
         ratePercent: ratePercent || '0',
         termMonths,
         wireReceivedDate: wireDate || null,
       });
-      toast(`Account created — share ${effectiveLoginEmail} + password with ${name}`);
+      toast(sendInvite ? `Account created. Invitation queued for ${effectiveLoginEmail}.` : `Account created — share ${effectiveLoginEmail} + password with ${name}`);
       router.push('/console/investors');
       router.refresh();
     } catch (err) {
@@ -156,7 +158,11 @@ export function CreateAccountView() {
             <Field label="LOGIN EMAIL">
               <input className="fieldLight" data-testid="ca-login-email" placeholder="defaults to contact email" value={effectiveLoginEmail} onChange={(e) => { setLoginTouched(true); setLoginEmail(e.target.value); }} />
             </Field>
-            <Field label="INITIAL PASSWORD">
+            <label style={{display:'flex',gap:8,alignItems:'center'}}>
+              <input type="checkbox" data-testid="ca-send-invite" checked={sendInvite} onChange={e => setSendInvite(e.target.checked)} />
+              Email the investor a secure password setup link
+            </label>
+            {!sendInvite && <><Field label="INITIAL PASSWORD">
               <div style={{ display: 'flex', gap: 8 }}>
                 <input className="fieldLight" data-testid="ca-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Set or generate" />
                 <button className="btnNeutral" style={{ padding: '0 14px', whiteSpace: 'nowrap' }} onClick={generatePassword} type="button">Generate</button>
@@ -168,7 +174,7 @@ export function CreateAccountView() {
             </label>
             <div style={{ fontSize: '.74rem', color: '#8b93a3' }}>
               {PASSWORD_HINT} Share the login email + password with the investor securely.
-            </div>
+            </div></>}
           </div>
         </div>
 
