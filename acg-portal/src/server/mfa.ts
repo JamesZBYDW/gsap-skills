@@ -27,6 +27,15 @@ export const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 export const MFA_MAX_ATTEMPTS = 5;
 export const MFA_ENROLLMENT_TTL_MS = 15 * 60 * 1000;
 
+/**
+ * Test seam: runs after a request has read and verified its inputs and before
+ * its batch commits, so tests can land a competing change exactly there.
+ * Never passed by application code.
+ */
+export interface MfaHooks {
+  beforeCommit?: () => Promise<void>;
+}
+
 /** SQL guard: the user still has `password_hash = ?` and is not locked at `?`. */
 const USER_UNCHANGED = `EXISTS (SELECT 1 FROM users WHERE id = ? AND password_hash = ? AND (locked_until IS NULL OR locked_until <= ?))`;
 
@@ -98,18 +107,60 @@ async function checkCode(
   return row ? { kind: 'recovery', id: row.id, hash } : null;
 }
 
-/** Statements that consume a checked code (abort the batch if already spent). */
-function spendCode(database: D1Database, userId: string, checked: CheckedCode, now: number): D1PreparedStatement[] {
-  if (checked.kind === 'totp') {
-    return [
-      database.prepare(`INSERT INTO mfa_spent (user_id, kind, value, created_at) VALUES (?, 'totp', ?, ?)`).bind(userId, String(checked.step), now),
-    ];
-  }
-  return [
-    database.prepare(`INSERT INTO mfa_spent (user_id, kind, value, created_at) VALUES (?, 'recovery', ?, ?)`).bind(userId, checked.hash, now),
-    database.prepare('UPDATE mfa_recovery_codes SET used_at = ? WHERE id = ? AND used_at IS NULL').bind(now, checked.id),
-  ];
+interface Sql {
+  sql: string;
+  params: unknown[];
 }
+
+/**
+ * Statements that consume a checked code, and a SQL guard that is true only
+ * if this batch really consumed it.
+ *
+ * `pre` is the operation's own commit-time precondition (credentials
+ * unchanged, account unlocked, same factor on, challenge live…). The code is
+ * consumed ONLY when it holds, so an attempt that cannot succeed never burns
+ * a recovery code.
+ *  - TOTP: the time step is recorded in mfa_spent; a step already recorded
+ *    violates its UNIQUE key and aborts the whole batch (replay).
+ *  - Recovery: the row is marked used only if it is still a current, unused
+ *    code (a concurrent regeneration deletes it; a concurrent use marks it),
+ *    and a per-request marker row then proves this batch did it.
+ */
+function spendCode(database: D1Database, userId: string, checked: CheckedCode, now: number, pre: Sql): { statements: D1PreparedStatement[]; guard: Sql } {
+  if (checked.kind === 'totp') {
+    return {
+      statements: [
+        database
+          .prepare(`INSERT INTO mfa_spent (user_id, kind, value, created_at) SELECT ?, 'totp', ?, ? WHERE ${pre.sql}`)
+          .bind(userId, String(checked.step), now, ...pre.params),
+      ],
+      guard: { sql: '1', params: [] },
+    };
+  }
+  const marker = `recovery:${newId()}`;
+  return {
+    statements: [
+      database
+        .prepare(
+          `UPDATE mfa_recovery_codes SET used_at = ?
+           WHERE id = ? AND user_id = ? AND code_hash = ? AND used_at IS NULL AND ${pre.sql}`,
+        )
+        .bind(now, checked.id, userId, checked.hash, ...pre.params),
+      // changes() is the row count of the UPDATE just above (same transaction).
+      database.prepare(`INSERT INTO mfa_spent (user_id, kind, value, created_at) SELECT ?, 'op', ?, ? WHERE changes() = 1`).bind(userId, marker, now),
+    ],
+    guard: { sql: `EXISTS (SELECT 1 FROM mfa_spent WHERE user_id = ? AND kind = 'op' AND value = ?)`, params: [userId, marker] },
+  };
+}
+
+/** SQL: the user still has this password hash and is not locked. */
+const userUnchanged = (userId: string, passwordHash: string, now: number): Sql => ({ sql: USER_UNCHANGED, params: [userId, passwordHash, now] });
+/** SQL: this exact factor is still enabled. */
+const factorOn = (userId: string, ciphertext: string): Sql => ({
+  sql: 'EXISTS (SELECT 1 FROM mfa_factors WHERE user_id = ? AND secret_ciphertext = ? AND enabled_at IS NOT NULL)',
+  params: [userId, ciphertext],
+});
+const and = (...parts: Sql[]): Sql => ({ sql: parts.map((p) => `(${p.sql})`).join(' AND '), params: parts.flatMap((p) => p.params) });
 
 async function recoveryCodeRows(database: D1Database, keys: MfaKeys, userId: string, now: number, onlyIf: string, onlyIfParams: unknown[]) {
   const codes = generateRecoveryCodes();
@@ -154,21 +205,27 @@ export async function startEnrollment(
   password: string,
   ip: string | null,
   now = Date.now(),
+  hooks: MfaHooks = {},
 ): Promise<EnrollmentStart> {
   const user = await reauthenticate(database, userId, password);
+  await hooks.beforeCommit?.();
   const secret = new Uint8Array(randomBytes(20));
   const ciphertext = await encryptSecret(keys, userId, secret);
   const [upsert] = await database.batch([
     database
       .prepare(
-        `INSERT INTO mfa_factors (user_id, secret_ciphertext, created_at, enabled_at) VALUES (?, ?, ?, NULL)
+        `INSERT INTO mfa_factors (user_id, secret_ciphertext, created_at, enabled_at)
+         SELECT ?, ?, ?, NULL WHERE ${USER_UNCHANGED}
          ON CONFLICT (user_id) DO UPDATE SET secret_ciphertext = excluded.secret_ciphertext, created_at = excluded.created_at
          WHERE mfa_factors.enabled_at IS NULL`,
       )
-      .bind(userId, ciphertext, now),
+      .bind(userId, ciphertext, now, userId, user.passwordHash, now),
     auditStmtIf(database, { action: 'MFA_ENROLL_STARTED', actorUserId: userId, targetType: 'User', targetId: userId, ip }, 'changes() = 1', [], now),
   ]);
-  if (!upsert?.meta.changes) throw new HttpError(409, 'Two-factor authentication is already on.');
+  if (!upsert?.meta.changes) {
+    if ((await getFactor(database, userId))?.enabled_at) throw new HttpError(409, 'Two-factor authentication is already on.');
+    throw new HttpError(409, 'Your sign-in details changed. Please try again.');
+  }
   const encoded = base32Encode(secret);
   return { secret: encoded, otpauthUri: otpauthUri(encoded, user.email) };
 }
@@ -193,7 +250,10 @@ export async function confirmEnrollment(
   let results;
   try {
     results = await database.batch([
-      ...spendCode(database, userId, checked, now),
+      ...spendCode(database, userId, checked, now, {
+        sql: 'EXISTS (SELECT 1 FROM mfa_factors WHERE user_id = ? AND enabled_at IS NULL AND secret_ciphertext = ?)',
+        params: [userId, factor.secret_ciphertext],
+      }).statements,
       database
         .prepare('UPDATE mfa_factors SET enabled_at = ? WHERE user_id = ? AND enabled_at IS NULL AND secret_ciphertext = ?')
         .bind(now, userId, factor.secret_ciphertext),
@@ -205,7 +265,7 @@ export async function confirmEnrollment(
     if (isUniqueViolation(err, 'mfa_spent')) throw new HttpError(400, 'That code was already used. Wait for the next one.');
     throw err;
   }
-  if (!results[1]?.meta.changes) throw new HttpError(409, 'Start setup again.');
+  if (!results[1]?.meta.changes) throw new HttpError(409, 'Start setup again.'); // [0] spends the TOTP step
   return codes;
 }
 
@@ -228,15 +288,18 @@ export async function disableMfa(
   code: string,
   ip: string | null,
   now = Date.now(),
+  hooks: MfaHooks = {},
 ): Promise<void> {
   const { user, factor, checked } = await reauthWithCode(database, keys, userId, password, code, now);
+  await hooks.beforeCommit?.();
+  const pre = and(factorOn(userId, factor.secret_ciphertext), userUnchanged(userId, user.passwordHash, now));
+  const spend = spendCode(database, userId, checked, now, pre);
+  const gate = and(pre, spend.guard);
   let results;
   try {
     results = await database.batch([
-      ...spendCode(database, userId, checked, now),
-      database
-        .prepare(`DELETE FROM mfa_factors WHERE user_id = ? AND secret_ciphertext = ? AND enabled_at IS NOT NULL AND ${USER_UNCHANGED}`)
-        .bind(userId, factor.secret_ciphertext, userId, user.passwordHash, now),
+      ...spend.statements,
+      database.prepare(`DELETE FROM mfa_factors WHERE user_id = ? AND ${gate.sql}`).bind(userId, ...gate.params),
       auditStmtIf(database, { action: 'MFA_DISABLED', actorUserId: userId, targetType: 'User', targetId: userId, ip, metadata: { with: checked.kind } }, 'changes() = 1', [], now),
       database.prepare('DELETE FROM mfa_recovery_codes WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM mfa_factors WHERE user_id = ?)').bind(userId, userId),
     ]);
@@ -244,8 +307,7 @@ export async function disableMfa(
     if (isUniqueViolation(err, 'mfa_spent')) throw new HttpError(400, 'That code was already used.');
     throw err;
   }
-  const deleted = results[checked.kind === 'totp' ? 1 : 2];
-  if (!deleted?.meta.changes) throw new HttpError(409, 'Your sign-in details changed. Please try again.');
+  if (!results[spend.statements.length]?.meta.changes) throw new HttpError(409, 'Your sign-in details changed. Please try again.');
 }
 
 export async function regenerateRecoveryCodes(
@@ -256,24 +318,52 @@ export async function regenerateRecoveryCodes(
   code: string,
   ip: string | null,
   now = Date.now(),
+  hooks: MfaHooks = {},
 ): Promise<string[]> {
   const { user, factor, checked } = await reauthWithCode(database, keys, userId, password, code, now);
-  const stillEnabled = `EXISTS (SELECT 1 FROM mfa_factors WHERE user_id = ? AND secret_ciphertext = ? AND enabled_at IS NOT NULL) AND ${USER_UNCHANGED}`;
-  const guardParams = [userId, factor.secret_ciphertext, userId, user.passwordHash, now];
-  const { codes, statements } = await recoveryCodeRows(database, keys, userId, now, stillEnabled, guardParams);
+  await hooks.beforeCommit?.();
+  const pre = and(factorOn(userId, factor.secret_ciphertext), userUnchanged(userId, user.passwordHash, now));
+  const spend = spendCode(database, userId, checked, now, pre);
+  const gate = and(pre, spend.guard);
+
+  // The marker row is written only if, at commit, the same factor is still on,
+  // the credentials are unchanged and the code was consumed by this batch.
+  // Everything after it depends on the marker, so a no-op changes nothing and
+  // is detected from this batch's own results (never from existing rows).
+  const marker = `regen:${newId()}`;
+  const markerHeld = `EXISTS (SELECT 1 FROM mfa_spent WHERE user_id = ? AND kind = 'op' AND value = ?)`;
+  const markerParams = [userId, marker];
+  const codes = generateRecoveryCodes();
+  const inserts: D1PreparedStatement[] = [];
+  for (const c of codes) {
+    inserts.push(
+      database
+        .prepare(`INSERT INTO mfa_recovery_codes (id, user_id, code_hash, created_at) SELECT ?, ?, ?, ? WHERE ${markerHeld}`)
+        .bind(newId(), userId, await recoveryCodeHash(keys, userId, normalizeRecoveryCode(c)!), now, ...markerParams),
+    );
+  }
+  let results;
   try {
-    await database.batch([
-      ...spendCode(database, userId, checked, now),
-      database.prepare(`DELETE FROM mfa_recovery_codes WHERE user_id = ? AND ${stillEnabled}`).bind(userId, ...guardParams),
-      ...statements,
-      auditStmtIf(database, { action: 'MFA_RECOVERY_REGENERATED', actorUserId: userId, targetType: 'User', targetId: userId, ip }, stillEnabled, guardParams, now),
+    results = await database.batch([
+      ...spend.statements,
+      database
+        .prepare(
+          `INSERT INTO mfa_spent (user_id, kind, value, created_at) SELECT ?, 'op', ?, ? WHERE ${gate.sql}`,
+        )
+        .bind(userId, marker, now, ...gate.params),
+      database.prepare(`DELETE FROM mfa_recovery_codes WHERE user_id = ? AND ${markerHeld}`).bind(userId, ...markerParams),
+      ...inserts,
+      auditStmtIf(database, { action: 'MFA_RECOVERY_REGENERATED', actorUserId: userId, targetType: 'User', targetId: userId, ip }, markerHeld, markerParams, now),
     ]);
   } catch (err) {
     if (isUniqueViolation(err, 'mfa_spent')) throw new HttpError(400, 'That code was already used.');
     throw err;
   }
-  const status = await getMfaStatus(database, userId);
-  if (status.recoveryCodesRemaining !== codes.length) throw new HttpError(409, 'Your sign-in details changed. Please try again.');
+  const at = spend.statements.length;
+  const inserted = results.slice(at + 2, at + 2 + inserts.length);
+  if (results[at]?.meta.changes !== 1 || inserted.length !== codes.length || inserted.some((r) => r.meta.changes !== 1)) {
+    throw new HttpError(409, 'Your sign-in details changed. Please try again.');
+  }
   return codes;
 }
 
@@ -304,7 +394,7 @@ export async function createChallenge(
       )
       .bind(newId(), sha256(token), userId, verifiedHash, expiresAt.getTime(), now, meta.ip, meta.userAgent?.slice(0, 512) ?? null, userId, verifiedHash, now),
     auditStmtIf(database, { action: 'AUTH_MFA_CHALLENGE', actorUserId: userId, ip: meta.ip }, 'changes() = 1', [], now),
-    database.prepare(`DELETE FROM mfa_spent WHERE kind IN ('totp', 'challenge') AND created_at < ?`).bind(now - 24 * 3600 * 1000),
+    database.prepare(`DELETE FROM mfa_spent WHERE kind IN ('totp', 'challenge', 'op') AND created_at < ?`).bind(now - 24 * 3600 * 1000),
   ]);
   return inserted?.meta.changes === 1 ? { token, expiresAt } : null;
 }
@@ -335,6 +425,7 @@ export async function completeChallenge(
   meta: { ip: string | null; userAgent?: string | null },
   recordFailure: (userId: string, checkedHash: string) => Promise<void>,
   now = Date.now(),
+  hooks: MfaHooks = {},
 ): Promise<ChallengeOutcome> {
   const challenge = await database
     .prepare(
@@ -362,18 +453,24 @@ export async function completeChallenge(
     return { ok: false, reason: 'invalid', attemptsLeft };
   }
 
+  await hooks.beforeCommit?.();
+  // Everything the session depends on, checked again when the batch commits.
+  const pre = and(
+    userUnchanged(userId, challenge.password_hash, now),
+    factorOn(userId, factor.secret_ciphertext),
+    { sql: 'EXISTS (SELECT 1 FROM mfa_challenges WHERE id = ? AND expires_at > ?)', params: [challenge.id, now] },
+  );
+  const spend = spendCode(database, userId, checked, now, pre);
+  const gate = and(pre, spend.guard);
   const session = prepareSession(database, userId, meta, now, {
     passwordHash: challenge.password_hash,
-    extraCondition: `EXISTS (SELECT 1 FROM mfa_factors WHERE user_id = ? AND secret_ciphertext = ? AND enabled_at IS NOT NULL)
-                     AND EXISTS (SELECT 1 FROM mfa_challenges WHERE id = ? AND expires_at > ?)`,
-    extraParams: [userId, factor.secret_ciphertext, challenge.id, now],
+    extraCondition: gate.sql,
+    extraParams: gate.params,
   });
   const statements = [
     database.prepare(`INSERT INTO mfa_spent (user_id, kind, value, created_at) VALUES (?, 'challenge', ?, ?)`).bind(userId, challenge.id, now),
-    ...spendCode(database, userId, checked, now),
-    database
-      .prepare(`UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ? AND password_hash = ? AND (locked_until IS NULL OR locked_until <= ?)`)
-      .bind(userId, challenge.password_hash, now),
+    ...spend.statements,
+    database.prepare(`UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ? AND ${gate.sql}`).bind(userId, ...gate.params),
     session.statement,
     database.prepare('DELETE FROM mfa_challenges WHERE id = ?').bind(challenge.id),
     auditStmtIf(

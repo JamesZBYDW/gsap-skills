@@ -17,7 +17,7 @@ const note: React.CSSProperties = { fontSize: '.82rem', color: '#5d6b82', lineHe
 
 type Mode = 'idle' | 'password' | 'scan' | 'codes' | 'disable' | 'regenerate';
 
-export function MfaSettings({ vm, readOnly }: { vm: MfaSettingsVM; readOnly: boolean }) {
+export function MfaSettings({ vm, readOnly, readOnlyNote }: { vm: MfaSettingsVM; readOnly: boolean; readOnlyNote?: string }) {
   const router = useRouter();
   const { toast } = useToast();
   const [mode, setMode] = useState<Mode>('idle');
@@ -115,7 +115,7 @@ export function MfaSettings({ vm, readOnly }: { vm: MfaSettingsVM; readOnly: boo
 
         {readOnly && (
           <div className="quietNote" style={{ marginTop: 16 }}>
-            Read-only view. Only the account holder can change two-factor settings.
+            {readOnlyNote ?? 'Read-only view. Only the account holder can change two-factor settings.'}
           </div>
         )}
 
