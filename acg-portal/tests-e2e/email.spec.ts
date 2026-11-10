@@ -6,9 +6,10 @@ import { test, expect, type APIRequestContext, type Page } from '@playwright/tes
 const explorer = '/cdn-cgi/local/explorer/api/local';
 
 async function openMailLink(page: Page, request: APIRequestContext, recipient: string, subject: string) {
-  const scheduled = await request.post(`${explorer}/scheduled?worker=acg-portal`, { data: { cron: '* * * * *' } });
+  // Invoke the Worker on this test's port, even when another local instance shares its name.
+  const scheduled = await request.get('/cdn-cgi/local/scheduled', { params: { cron: '* * * * *' } });
   expect(scheduled.status()).toBe(200);
-  expect((await scheduled.json()).success).toBe(true);
+  expect((await scheduled.text()).trim()).toBe('ok');
   let messageId: string | undefined;
   await expect.poll(async () => {
     const response = await request.get(`${explorer}/email/sending?worker=acg-portal&per_page=100`);
