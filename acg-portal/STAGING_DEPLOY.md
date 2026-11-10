@@ -57,7 +57,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"  
 | Var | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | ✅ | Staging Postgres, e.g. `postgresql://user:pass@host:5432/acg_portal?sslmode=require` |
-| `SESSION_SECRET` | ✅ | 48+ random bytes (above). Rotating it invalidates all sessions. |
+| `SESSION_SECRET` | ✅ | 48+ random bytes (above). Reserved for future session signing; sessions are DB-backed tokens, so rotating it does not sign anyone out. |
 | `DOCUMENT_URL_SECRET` | ✅ | 48+ random bytes (above). Signs document download links. |
 | `APP_URL` | ✅ | Public staging URL, e.g. `https://acg-staging.example.com` |
 | `NODE_ENV` | ✅ | `production` (marks cookies Secure, enables HSTS) |

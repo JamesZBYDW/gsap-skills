@@ -33,7 +33,7 @@ See `.env.example`. In production set, at minimum:
 | Var | Notes |
 |---|---|
 | `DATABASE_URL` | Postgres connection string (use SSL: `?sslmode=require`). |
-| `SESSION_SECRET` | 48+ random bytes. Rotating invalidates all sessions. |
+| `SESSION_SECRET` | 48+ random bytes. Reserved for future session signing; sessions are DB-backed tokens, so rotating it does not sign anyone out. |
 | `DOCUMENT_URL_SECRET` | 48+ random bytes for signed document links. |
 | `APP_URL` | Public HTTPS URL, e.g. `https://portal.acg.example`. |
 | `NODE_ENV` | `production` (marks cookies Secure, enables HSTS). |
