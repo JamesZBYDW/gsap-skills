@@ -13,6 +13,8 @@ export const APP_PORT = 3000;
 /** How long to wait for a cold container to start answering HTTP. */
 export const READY_TIMEOUT_MS = 90_000;
 export const READY_POLL_MS = 250;
+/** Upper bound for one readiness probe (a port can accept TCP and never answer). */
+export const PROBE_TIMEOUT_MS = 5_000;
 
 export interface PortalEnv {
   /** Public hostname, e.g. portal.acgroupinc.com (a `vars` entry). */
@@ -196,6 +198,27 @@ export interface LifecycleDeps {
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   log?: (message: string) => void;
+  readyTimeoutMs?: number;
+  probeTimeoutMs?: number;
+}
+
+/**
+ * Startup failures are reported by category only. Runtime error messages can
+ * echo configuration (a connection string, a secret) and are never logged.
+ */
+export type StartupFailure = 'start-failed' | 'exited-during-startup' | 'ready-timeout' | 'unexpected';
+
+class StartupError extends Error {
+  constructor(readonly category: StartupFailure) {
+    super(category);
+    this.name = 'StartupError';
+  }
+}
+
+/** A process exit code if it is a plausible one; anything else is dropped. */
+export function safeExitCode(err: unknown): number | undefined {
+  const code = (err as { exitCode?: unknown } | null)?.exitCode;
+  return typeof code === 'number' && Number.isInteger(code) && code >= 0 && code <= 255 ? code : undefined;
 }
 
 const plain = (status: number, body: string, extra: Record<string, string> = {}) =>
@@ -205,12 +228,15 @@ const plain = (status: number, body: string, extra: Record<string, string> = {})
  * Starts the container on demand (once, however many requests arrive
  * together), waits until the app answers on APP_PORT, and forwards requests
  * with the public hostname as the Host so the app's same-origin check holds.
+ * Application requests are forwarded exactly once and never retried.
  */
 export class PortalLifecycle {
   private startup: Promise<void> | null = null;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly now: () => number;
   private readonly log: (message: string) => void;
+  private readonly readyTimeoutMs: number;
+  private readonly probeTimeoutMs: number;
 
   constructor(
     private readonly container: ContainerLike | undefined,
@@ -220,6 +246,8 @@ export class PortalLifecycle {
     this.sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.now = deps.now ?? (() => Date.now());
     this.log = deps.log ?? ((m) => console.log(m));
+    this.readyTimeoutMs = deps.readyTimeoutMs ?? READY_TIMEOUT_MS;
+    this.probeTimeoutMs = deps.probeTimeoutMs ?? PROBE_TIMEOUT_MS;
 
     // After a Durable Object restart the container may still be running:
     // re-attach the exit watcher and the idle timer, which do not survive.
@@ -245,15 +273,16 @@ export class PortalLifecycle {
     try {
       await this.ensureReady(container);
     } catch (err) {
-      this.log(`portal: container did not become ready: ${errorName(err)}`);
+      const category: StartupFailure = err instanceof StartupError ? err.category : 'unexpected';
+      this.log(`portal: container did not become ready (${category})`);
       return plain(503, 'Portal is starting. Please retry shortly.', { 'retry-after': '5' });
     }
 
     try {
       return await container.getTcpPort(APP_PORT).fetch(this.toContainerRequest(request));
-    } catch (err) {
+    } catch {
       if (!container.running) this.startup = null;
-      this.log(`portal: request to container failed: ${errorName(err)}`);
+      this.log('portal: request to container failed');
       return plain(502, 'Portal is temporarily unavailable. Please retry.', { 'retry-after': '5' });
     }
   }
@@ -261,8 +290,7 @@ export class PortalLifecycle {
   /** Rebuilds the request with the public host; headers/body/method preserved. */
   toContainerRequest(request: Request): Request {
     const incoming = new URL(request.url);
-    const target = `http://${this.env.APP_HOSTNAME}${incoming.pathname}${incoming.search}`;
-    return retarget(request, target);
+    return retarget(request, `http://${this.env.APP_HOSTNAME}${incoming.pathname}${incoming.search}`);
   }
 
   private ensureReady(container: ContainerLike): Promise<void> {
@@ -279,10 +307,18 @@ export class PortalLifecycle {
   private async boot(container: ContainerLike): Promise<void> {
     if (!container.running) {
       this.log('portal: starting container');
-      container.start({ enableInternet: true, env: containerEnv(this.env) });
+      try {
+        container.start({ enableInternet: true, env: containerEnv(this.env) });
+      } catch {
+        throw new StartupError('start-failed');
+      }
       this.watchExit();
     }
-    await container.setInactivityTimeout(idleTimeoutMs(this.env));
+    try {
+      await container.setInactivityTimeout(idleTimeoutMs(this.env));
+    } catch {
+      throw new StartupError('unexpected');
+    }
     await this.waitUntilServing(container);
   }
 
@@ -294,32 +330,71 @@ export class PortalLifecycle {
       },
       (err: unknown) => {
         this.startup = null;
-        const code = (err as { exitCode?: number })?.exitCode;
+        const code = safeExitCode(err);
         this.log(`portal: container exited${code === undefined ? '' : ` with code ${code}`}`);
       },
     );
   }
 
+  /** Polls until the app answers, within an overall deadline. */
   private async waitUntilServing(container: ContainerLike): Promise<void> {
-    const deadline = this.now() + READY_TIMEOUT_MS;
+    const deadline = this.now() + this.readyTimeoutMs;
     for (;;) {
-      try {
-        const res = await container
-          .getTcpPort(APP_PORT)
-          .fetch(new Request(`http://${this.env.APP_HOSTNAME}/login`, { method: 'GET', redirect: 'manual' }));
-        if (res.status < 500) return;
-      } catch {
-        // Not listening yet.
-      }
-      if (!container.running) throw new Error('ContainerExited');
-      if (this.now() >= deadline) throw new Error('ReadyTimeout');
+      const remaining = deadline - this.now();
+      if (remaining <= 0) throw new StartupError('ready-timeout');
+      if (await this.probe(container, Math.min(this.probeTimeoutMs, remaining))) return;
+      if (!container.running) throw new StartupError('exited-during-startup');
+      if (this.now() >= deadline) throw new StartupError('ready-timeout');
       await this.sleep(READY_POLL_MS);
     }
   }
-}
 
-function errorName(err: unknown): string {
-  // Error names/messages from the runtime, never request or config contents.
-  if (err instanceof Error) return err.message.slice(0, 200) || err.name;
-  return 'unknown error';
+  /**
+   * One readiness check, bounded by `timeoutMs` whether or not the runtime
+   * honours the abort signal. Response bodies are always released.
+   */
+  private async probe(container: ContainerLike, timeoutMs: number): Promise<boolean> {
+    const controller = new AbortController();
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        resolve(null);
+      }, timeoutMs);
+    });
+
+    let pending: Promise<Response>;
+    try {
+      pending = container.getTcpPort(APP_PORT).fetch(
+        new Request(`http://${this.env.APP_HOSTNAME}/login`, {
+          method: 'GET',
+          redirect: 'manual',
+          signal: controller.signal,
+        }),
+      );
+    } catch {
+      clearTimeout(timer);
+      return false;
+    }
+    // A response that arrives after the timeout is still released.
+    pending.then(
+      (late) => {
+        if (timedOut) void late.body?.cancel().catch(() => {});
+      },
+      () => {},
+    );
+
+    try {
+      const res = await Promise.race([pending, timeout]);
+      if (!res) return false;
+      await res.body?.cancel().catch(() => {});
+      return res.status < 500;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 }

@@ -7,6 +7,7 @@ import {
   containerEnv,
   handleRequest,
   idleTimeoutMs,
+  safeExitCode,
   type ContainerLike,
   type NamespaceLike,
   type PortalEnv,
@@ -340,5 +341,181 @@ describe('PortalLifecycle', () => {
   it('answers 500 when no container is bound', async () => {
     const lc = new PortalLifecycle(undefined, goodEnv(), noSleep);
     expect((await lc.fetch(appRequest())).status).toBe(500);
+  });
+});
+
+// ─── Review regressions: bounded readiness, no retries, safe logging ──────
+
+const SENTINEL = 'SENTINEL-postgresql://u:pw-0xDEADBEEF@db.example.com';
+
+/** A container whose readiness and app responses are supplied per test. */
+function scriptedContainer(opts: {
+  probe: (req: Request) => Promise<Response>;
+  app?: (req: Request) => Promise<Response>;
+  start?: () => void;
+  monitor?: () => Promise<void>;
+}) {
+  let running = false;
+  const probes: Request[] = [];
+  const appCalls: Request[] = [];
+  const container: ContainerLike = {
+    get running() {
+      return running;
+    },
+    start() {
+      opts.start?.();
+      running = true;
+    },
+    monitor: opts.monitor ?? (() => new Promise<void>(() => {})),
+    async setInactivityTimeout() {},
+    getTcpPort() {
+      return {
+        fetch(req: Request) {
+          if (!req.headers.get('x-test')) {
+            probes.push(req);
+            return opts.probe(req);
+          }
+          appCalls.push(req);
+          return opts.app ? opts.app(req) : Promise.resolve(new Response('app'));
+        },
+      };
+    },
+  };
+  return { container, probes, appCalls };
+}
+
+describe('PortalLifecycle — bounded readiness', () => {
+  it('gives up on a probe that accepts the connection but never answers, aborting it', async () => {
+    const sc = scriptedContainer({ probe: () => new Promise<Response>(() => {}) }); // never settles
+    const logs: string[] = [];
+    let t = 0;
+    const lc = new PortalLifecycle(sc.container, goodEnv(), {
+      log: (m) => logs.push(m),
+      now: () => t,
+      sleep: async (ms) => {
+        t += ms;
+      },
+      readyTimeoutMs: 1_000,
+      probeTimeoutMs: 10,
+    });
+    const started = Date.now();
+    const res = await lc.fetch(appRequest());
+    expect(res.status).toBe(503);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(sc.probes.length).toBeGreaterThan(0);
+    expect(sc.probes.every((p) => p.signal.aborted)).toBe(true);
+    expect(sc.appCalls).toHaveLength(0);
+    expect(logs).toContain('portal: container did not become ready (ready-timeout)');
+  });
+
+  it('caps each probe by the time left before the overall deadline', async () => {
+    const sc = scriptedContainer({ probe: () => new Promise<Response>(() => {}) });
+    let t = 0;
+    const lc = new PortalLifecycle(sc.container, goodEnv(), {
+      log: () => {},
+      now: () => t,
+      sleep: async (ms) => {
+        t += ms;
+      },
+      readyTimeoutMs: 260, // one 250 ms poll interval leaves 10 ms for the second probe
+      probeTimeoutMs: 60_000, // would hang the test if not capped
+    });
+    const started = Date.now();
+    expect((await lc.fetch(appRequest())).status).toBe(503);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  it('releases readiness response bodies, including ones that arrive after the timeout', async () => {
+    const cancelled: string[] = [];
+    const body = (label: string) =>
+      new ReadableStream({
+        cancel() {
+          cancelled.push(label);
+        },
+      });
+    let n = 0;
+    let releaseLate!: (r: Response) => void;
+    const sc = scriptedContainer({
+      probe: () => {
+        n++;
+        if (n === 1) return new Promise<Response>((r) => (releaseLate = r)); // times out, answers later
+        if (n === 2) return Promise.resolve(new Response(body('error'), { status: 502 }));
+        return Promise.resolve(new Response(body('ready'), { status: 200 }));
+      },
+    });
+    const lc = new PortalLifecycle(sc.container, goodEnv(), { log: () => {}, sleep: async () => {}, probeTimeoutMs: 10 });
+    expect((await lc.fetch(appRequest())).status).toBe(200);
+    releaseLate(new Response(body('late'), { status: 200 }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(cancelled.sort()).toEqual(['error', 'late', 'ready']);
+  });
+
+  it('forwards an application POST once and never retries it', async () => {
+    const sc = scriptedContainer({
+      probe: () => Promise.resolve(new Response(null, { status: 200 })),
+      app: () => Promise.reject(new Error('connection reset')),
+    });
+    const lc = new PortalLifecycle(sc.container, goodEnv(), { log: () => {}, sleep: async () => {} });
+    const res = await lc.fetch(appRequest('/api/team/accounts', { method: 'POST', body: '{"a":1}' }));
+    expect(res.status).toBe(502);
+    expect(sc.appCalls).toHaveLength(1);
+  });
+});
+
+describe('PortalLifecycle — logs carry categories, never runtime error text', () => {
+  const capture = () => {
+    const logs: string[] = [];
+    return { logs, deps: { log: (m: string) => logs.push(m), sleep: async () => {}, probeTimeoutMs: 10 } };
+  };
+
+  it('a start() error containing a secret is logged as "start-failed" only', async () => {
+    const { logs, deps } = capture();
+    const sc = scriptedContainer({
+      probe: () => Promise.resolve(new Response(null)),
+      start: () => {
+        throw new Error(`could not start: ${SENTINEL}`);
+      },
+    });
+    const res = await new PortalLifecycle(sc.container, goodEnv(), deps).fetch(appRequest());
+    expect(res.status).toBe(503);
+    expect(logs).toContain('portal: container did not become ready (start-failed)');
+    expect(logs.join('\n')).not.toContain('SENTINEL');
+    expect(await res.text()).not.toContain('SENTINEL');
+  });
+
+  it('an upstream failure containing a secret is logged without its message', async () => {
+    const { logs, deps } = capture();
+    const sc = scriptedContainer({
+      probe: () => Promise.resolve(new Response(null)),
+      app: () => Promise.reject(new Error(SENTINEL)),
+    });
+    const res = await new PortalLifecycle(sc.container, goodEnv(), deps).fetch(appRequest());
+    expect(res.status).toBe(502);
+    expect(logs).toContain('portal: request to container failed');
+    expect(logs.join('\n')).not.toContain('SENTINEL');
+  });
+
+  it('a container exit logs only a valid numeric exit code', async () => {
+    for (const [err, expected] of [
+      [Object.assign(new Error(SENTINEL), { exitCode: 137 }), 'portal: container exited with code 137'],
+      [Object.assign(new Error(SENTINEL), { exitCode: `1 ${SENTINEL}` }), 'portal: container exited'],
+      [Object.assign(new Error(SENTINEL), { exitCode: 99999 }), 'portal: container exited'],
+    ] as const) {
+      const { logs, deps } = capture();
+      const sc = scriptedContainer({ probe: () => Promise.resolve(new Response(null)), monitor: () => Promise.reject(err) });
+      await new PortalLifecycle(sc.container, goodEnv(), deps).fetch(appRequest());
+      await new Promise((r) => setTimeout(r, 0));
+      expect(logs).toContain(expected);
+      expect(logs.join('\n')).not.toContain('SENTINEL');
+    }
+  });
+
+  it('safeExitCode accepts only integers 0–255', () => {
+    expect(safeExitCode({ exitCode: 0 })).toBe(0);
+    expect(safeExitCode({ exitCode: 255 })).toBe(255);
+    expect(safeExitCode({ exitCode: -1 })).toBeUndefined();
+    expect(safeExitCode({ exitCode: 1.5 })).toBeUndefined();
+    expect(safeExitCode({ exitCode: '1' })).toBeUndefined();
+    expect(safeExitCode(null)).toBeUndefined();
   });
 });
