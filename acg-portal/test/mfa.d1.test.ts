@@ -91,6 +91,21 @@ describe('enrollment', () => {
     await expect(startEnrollment(db, keys, u.id, PW, null, t)).rejects.toMatchObject({ status: 409 });
   });
 
+  it('keeps the winning recovery codes when two confirmations share the same millisecond', async () => {
+    const user = await makeUser();
+    const t = Date.now();
+    const pending = await startEnrollment(db, keys, user.id, PW, null, t);
+    const code = await codeAt(base32Decode(pending.secret), t);
+    let winningCodes: string[] = [];
+    await expect(confirmEnrollment(db, keys, user.id, code, null, t, {
+      beforeCommit: async () => { winningCodes = await confirmEnrollment(db, keys, user.id, code, null, t); },
+    })).rejects.toMatchObject({ status: 409 });
+    expect(await count("SELECT count(*) AS n FROM audit_logs WHERE actor_user_id = ? AND action = 'MFA_ENABLED'", user.id)).toBe(1);
+    expect(winningCodes).toHaveLength(10);
+    const ch = await challenge(user.id, t);
+    expect(await complete(ch.token, winningCodes[0]!, t)).toMatchObject({ ok: true, method: 'recovery' });
+  });
+
   it('the enrollment code cannot be replayed to sign in', async () => {
     const u = await makeUser();
     const t = Date.now();

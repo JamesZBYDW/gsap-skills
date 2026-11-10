@@ -238,6 +238,7 @@ export async function confirmEnrollment(
   code: string,
   ip: string | null,
   now = Date.now(),
+  hooks: MfaHooks = {},
 ): Promise<string[]> {
   const factor = await getFactor(database, userId);
   if (!factor || factor.enabled_at !== null) throw new HttpError(409, 'Start setup again.');
@@ -245,8 +246,11 @@ export async function confirmEnrollment(
   const checked = await checkCode(database, keys, userId, factor.secret_ciphertext, code, now, false);
   if (!checked) throw new HttpError(400, 'That code is not valid. Check the time on your device and try again.');
 
-  const enabledHere = 'EXISTS (SELECT 1 FROM mfa_factors WHERE user_id = ? AND enabled_at = ?)';
-  const { codes, statements } = await recoveryCodeRows(database, keys, userId, now, enabledHere, [userId, now]);
+  const marker = `enable:${newId()}`;
+  const enabledHere = "EXISTS (SELECT 1 FROM mfa_spent WHERE user_id = ? AND kind = 'op' AND value = ?)";
+  const markerParams = [userId, marker];
+  const { codes, statements } = await recoveryCodeRows(database, keys, userId, now, enabledHere, markerParams);
+  await hooks.beforeCommit?.();
   let results;
   try {
     results = await database.batch([
@@ -257,9 +261,11 @@ export async function confirmEnrollment(
       database
         .prepare('UPDATE mfa_factors SET enabled_at = ? WHERE user_id = ? AND enabled_at IS NULL AND secret_ciphertext = ?')
         .bind(now, userId, factor.secret_ciphertext),
-      database.prepare(`DELETE FROM mfa_recovery_codes WHERE user_id = ? AND ${enabledHere}`).bind(userId, userId, now),
+      // Only the confirmation that changed this factor can issue its recovery codes.
+      database.prepare(`INSERT INTO mfa_spent (user_id, kind, value, created_at) SELECT ?, 'op', ?, ? WHERE changes() = 1`).bind(userId, marker, now),
+      database.prepare(`DELETE FROM mfa_recovery_codes WHERE user_id = ? AND ${enabledHere}`).bind(userId, ...markerParams),
       ...statements,
-      auditStmtIf(database, { action: 'MFA_ENABLED', actorUserId: userId, targetType: 'User', targetId: userId, ip }, enabledHere, [userId, now], now),
+      auditStmtIf(database, { action: 'MFA_ENABLED', actorUserId: userId, targetType: 'User', targetId: userId, ip }, enabledHere, markerParams, now),
     ]);
   } catch (err) {
     if (isUniqueViolation(err, 'mfa_spent')) throw new HttpError(400, 'That code was already used. Wait for the next one.');

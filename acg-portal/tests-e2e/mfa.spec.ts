@@ -170,6 +170,7 @@ test('a session still on a management-issued password cannot change two-factor s
   await page.getByTestId('ca-email').fill(email);
   await page.getByTestId('ca-principal').fill('500,000');
   await page.getByTestId('ca-rate').fill('15');
+  await page.getByTestId('ca-send-invite').uncheck();
   await page.getByTestId('ca-password').fill(issued); // "require change" stays checked
   await page.getByTestId('ca-submit').click();
   await page.waitForURL('**/console/investors');
