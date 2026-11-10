@@ -389,7 +389,9 @@ export class PortalLifecycle {
     try {
       const res = await Promise.race([pending, timeout]);
       if (!res) return false;
-      await res.body?.cancel().catch(() => {});
+      // Initiate cleanup without waiting for the stream's cancellation hook:
+      // it must not extend the readiness deadline after headers arrive.
+      void res.body?.cancel().catch(() => {});
       return res.status < 500;
     } catch {
       return false;

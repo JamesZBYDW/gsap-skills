@@ -165,8 +165,9 @@ dc logs -f app           # application
 dc logs -f cloudflared   # tunnel
 ```
 
-**Rotate a secret** — edit `.env.production`, then `dc up -d`. Rotating
-`SESSION_SECRET` signs everyone out. To rotate the tunnel token, refresh it on
+**Rotate a secret** — edit `.env.production`, then `dc up -d`. Current sessions
+are database-backed opaque tokens; rotating `SESSION_SECRET` does not revoke
+them. To rotate the tunnel token, refresh it on
 the tunnel's page in the dashboard, update `TUNNEL_TOKEN`, and `dc up -d`.
 
 **Managed Postgres instead of the bundled one** — set `DATABASE_URL` in

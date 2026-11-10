@@ -100,16 +100,19 @@ first (Step 4) and set the secrets right after, because the Worker fails closed:
 without valid secrets it answers **503 "Portal is not configured"**, never
 starts the container, and logs only the names of the missing settings.
 
-Rotating `SESSION_SECRET` signs everyone out. Secret changes take effect at the
-next container start.
+Current sessions are database-backed opaque tokens and do not use
+`SESSION_SECRET`; rotating it does not sign users out. Session revocation is a
+separate database operation. Secret changes take effect at the next container
+start.
 
 ## Step 4 — Deploy
 
 ### Preferred: Workers Builds (Cloudflare builds the Dockerfile; no Docker on the Mac)
 
-In the Cloudflare dashboard, open **Workers & Pages → acg-portal → Settings → Builds**
-and connect the GitHub repository. If a GitHub connection or build token
-already exists, reuse it.
+For the first deployment, create/import a Worker named **acg-portal** from the
+GitHub repository in **Workers & Pages**. For an existing Worker, open
+**acg-portal → Settings → Builds** and connect the repository. Reuse an existing
+GitHub connection or suitable build token when available.
 
 | Setting | Value |
 |---|---|

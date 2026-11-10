@@ -385,6 +385,22 @@ function scriptedContainer(opts: {
 }
 
 describe('PortalLifecycle — bounded readiness', () => {
+  it('does not wait for response-body cancellation to settle before serving', async () => {
+    let cancelled = false;
+    const sc = scriptedContainer({
+      probe: async () => new Response(new ReadableStream({
+        cancel() {
+          cancelled = true;
+          return new Promise<void>(() => {});
+        },
+      })),
+    });
+    const lc = new PortalLifecycle(sc.container, goodEnv(), { log: () => {} });
+    expect((await lc.fetch(appRequest())).status).toBe(200);
+    expect(cancelled).toBe(true);
+    expect(sc.appCalls).toHaveLength(1);
+  }, 1_000);
+
   it('gives up on a probe that accepts the connection but never answers, aborting it', async () => {
     const sc = scriptedContainer({ probe: () => new Promise<Response>(() => {}) }); // never settles
     const logs: string[] = [];

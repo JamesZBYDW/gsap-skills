@@ -3,8 +3,7 @@
 //
 //   node scripts/deploy-prebuilt.mjs registry.cloudflare.com/<account-id>/acg-portal:<tag> [--dry-run]
 //
-// The image is built and pushed elsewhere (a machine with Docker, or the
-// "Portal container image" GitHub workflow) with:
+// The image is built and pushed on a machine with Docker with:
 //   npx wrangler containers build .. -t acg-portal:<tag> --push
 //
 // This writes wrangler.prebuilt.json (gitignored) — wrangler.jsonc with the
