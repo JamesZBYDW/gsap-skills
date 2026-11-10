@@ -1,0 +1,43 @@
+// ACG portal on Cloudflare: Worker + Durable Object + Container.
+// Secrets (DATABASE_URL, SESSION_SECRET, DOCUMENT_URL_SECRET) are Worker
+// secrets set with `wrangler secret put` — never put them in this file.
+// Runbook: ../CLOUDFLARE_CONTAINERS_DEPLOY.md
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "acg-portal",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-20",
+
+  // Served only on the custom domain; no workers.dev or preview URLs.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "portal.acgroupinc.com", "custom_domain": true }],
+
+  "vars": {
+    "APP_HOSTNAME": "portal.acgroupinc.com",
+    "IDLE_TIMEOUT_MINUTES": "30"
+  },
+
+  "containers": [
+    {
+      "class_name": "PortalContainer",
+      // Built from the app's Dockerfile on `wrangler deploy` (needs Docker).
+      // The prebuilt-image path swaps this for a registry reference instead:
+      // see scripts/deploy-prebuilt.mjs.
+      "image": "../Dockerfile",
+      "image_build_context": "..",
+      // One app instance: the login rate limiter is in memory.
+      "max_instances": 1,
+      "instance_type": "basic"
+    }
+  ],
+
+  "durable_objects": {
+    "bindings": [{ "name": "PORTAL", "class_name": "PortalContainer" }]
+  },
+
+  // Legacy migrations form (not `exports`; the two cannot be combined).
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PortalContainer"] }],
+
+  "observability": { "enabled": true }
+}

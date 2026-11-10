@@ -23,7 +23,9 @@ RUN npm run build
 # ── runner ────────────────────────────────────────────────────────────────
 FROM base AS runner
 ENV NODE_ENV=production
-RUN apt-get update -y && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+# ca-certificates: lets Prisma verify a managed Postgres's TLS certificate
+# (DATABASE_URL ...&sslaccept=strict).
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
@@ -34,10 +36,12 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/scripts/container-start.mjs ./scripts/container-start.mjs
 
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 
-# Run pending migrations, then start the standalone server.
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node server.js"]
+# Runs pending migrations (unless MIGRATE_ON_START=0), then the standalone
+# server. See scripts/container-start.mjs.
+CMD ["node", "scripts/container-start.mjs"]

@@ -6,6 +6,7 @@ node_modules
 !.env.example
 .prisma-engines
 .scratch
+cloudflare
 tests-e2e/.auth
 npm-debug.log*
 README.md
