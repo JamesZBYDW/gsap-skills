@@ -95,7 +95,15 @@ function d1(command: string, json = false): string {
   const r = spawnSync(
     'npx',
     ['wrangler', 'd1', 'execute', DB_NAME, remote ? '--remote' : '--local', ...persistArgs, ...(json ? ['--json'] : []), '--command', command],
-    { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' },
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8',
+      // The SQL carries the password hash: never let an inherited debug
+      // setting write it to wrangler's log files.
+      // WRANGLER_LOG pinned to the default level so an inherited debug setting
+      // can neither echo the SQL nor corrupt the --json output.
+      env: { ...process.env, WRANGLER_WRITE_LOGS: 'false', WRANGLER_LOG_SANITIZE: 'true', WRANGLER_LOG: 'log' },
+    },
   );
   if (r.status !== 0) fail('wrangler d1 execute failed (check `wrangler login` and the database name).');
   return r.stdout;

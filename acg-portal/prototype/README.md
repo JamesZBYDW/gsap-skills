@@ -40,6 +40,7 @@ You can exercise the flows:
   from the entered terms, and the investor is forced to set their own password on
   first sign-in.)
 
-The production application (Next.js + PostgreSQL + real session auth, server-side
-authorization, audit log, and the full lifecycle) is the rest of `acg-portal/`.
-Stand up a real, persistent environment with `../STAGING_DEPLOY.md`.
+The production application (Next.js on Cloudflare Workers + D1, real session
+auth, server-side authorization, audit log, and the full lifecycle) is the rest
+of `acg-portal/`. Run it locally with `npm run db:seed:local && npm run dev`, or
+deploy it with `../DEPLOY.md`.

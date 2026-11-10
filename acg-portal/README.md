@@ -8,7 +8,8 @@ relationship, and where ACG's Investor Relations (IR) team administers investors
 This is the **production application** built from the design handoff
 (`DESIGN_HANDOFF.md`) and product/compliance brief (`DESIGN_BRIEF.md`). It
 recreates the prototype 1:1 on a real stack: a real backend, real authentication,
-a Postgres database, server-side authorization, and an audit trail.
+a Cloudflare D1 database, server-side authorization, and an audit trail,
+running on Cloudflare Workers at `portal.acgroupinc.com`.
 
 > **Compliance note.** This is a securities offering handling PII. The product
 > is always the "ACG Promissory Note." Returns are **fixed for the term — not
@@ -20,10 +21,13 @@ a Postgres database, server-side authorization, and an audit trail.
 ## Stack
 
 - **Next.js 15** (App Router) + **React 19** + **TypeScript**
-- **PostgreSQL** + **Prisma** ORM
-- **Custom session auth** — Argon2id password hashing, DB-backed sessions in
-  httpOnly/SameSite cookies, role-based access control, per-account lockout,
-  per-IP rate limiting, CSRF (same-origin) checks, and an immutable audit log
+- **Cloudflare Workers** via **OpenNext** (`@opennextjs/cloudflare`)
+- **Cloudflare D1** (SQLite) through a small typed repository layer; every
+  multi-row write is one atomic D1 `batch()` that includes its audit records
+- **Custom session auth** — scrypt password hashing, DB-backed sessions in
+  httpOnly/Secure/SameSite cookies, role-based access control, atomic
+  per-account lockout, a shared D1 login throttle, CSRF (same-origin) checks,
+  and an append-only audit log
 - **Self-hosted Manrope** font (no external CDN); strict Content-Security-Policy
 - **Vitest** unit tests + **Playwright** e2e smoke
 
@@ -73,54 +77,56 @@ account, and out-of-band contact (email/phone) is used for anything conversation
 
 ## Local development
 
-Prerequisites: Node 20+, a running PostgreSQL (or use Docker).
+Prerequisites: Node 20+. No database server or Docker is needed — local D1 runs
+inside wrangler.
 
 ```bash
-cp .env.example .env            # then edit secrets (see below)
-
-# Option A — Postgres via Docker
-docker compose up -d db
-
-# Install + set up the database
-npm install
-npm run db:migrate              # apply migrations
-npm run db:seed                 # seed the prototype's sample data
-
-npm run dev                     # http://localhost:3000
+npm ci
+cp .dev.vars.example .dev.vars     # local secrets for the Worker
+npm run db:seed:local              # reset LOCAL D1, apply migrations, load demo data
+npm run dev                        # next dev with local D1 bindings — http://localhost:3000
 ```
 
-Generate strong secrets for `.env`:
+To run the real Worker build in workerd (what production runs):
 
 ```bash
-node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"   # SESSION_SECRET
-node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"   # DOCUMENT_URL_SECRET
+npm run preview                    # opennextjs-cloudflare build + preview
 ```
 
-### Demo credentials (from the seed)
+`wrangler dev` treats requests as coming to the configured route
+(`portal.acgroupinc.com`), so plain-HTTP local requests are redirected to
+HTTPS. For browser testing of the built Worker, serve it over HTTPS on 443
+and map the hostname to 127.0.0.1 (see `DEPLOY.md` → "Testing the Worker
+locally"), or pass `--infer-origin-from-routes=false` and use localhost.
 
-The seed creates two logins (passwords come from `.env`, defaults shown):
+### Demo credentials (local seed only)
 
-- **Investor** — `m.vance@gmail.com` / `ChangeMe!Inv1234` (Margaret Vance,
-  $250,000 @ 18%, 24-month note, 14 of 24 distributions paid — matches the
-  prototype exactly).
-- **Team** — `james@acg.example` / `ChangeMe!Team123` (IR admin).
+`npm run db:seed:local` creates two demo logins (override with `SEED_*` env vars):
 
-Change these before any non-demo deployment.
+| Side | Email | Password |
+|---|---|---|
+| Investor | `m.vance@gmail.com` | `ChangeMe!Inv1234` |
+| Investor Relations | `james@acg.example` | `ChangeMe!Team123` |
+
+The seed only ever targets local D1 and refuses `--remote`. Production is
+never seeded: its first management login is created with `npm run
+admin:create` (see `DEPLOY.md`).
 
 ## Scripts
 
 | Script | Purpose |
 |---|---|
-| `npm run dev` | Dev server |
-| `npm run build` | `prisma generate` + production build |
-| `npm start` | Run the production build |
-| `npm run db:migrate` | Create/apply migrations (dev) |
-| `npm run db:deploy` | Apply migrations (prod/CI) |
-| `npm run db:seed` | Seed sample data |
-| `npm run db:reset` | Drop, re-migrate, re-seed |
-| `npm test` | Unit tests (Vitest) |
-| `npm run test:e2e` | Playwright smoke tests |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm run dev` | Next dev server with local D1 bindings |
+| `npm run build` | Next production build |
+| `npm run build:worker` | OpenNext Worker build (`.open-next/`) |
+| `npm run preview` | Build + run the Worker locally in workerd |
+| `npm run deploy` | Build + deploy the Worker (production; see `DEPLOY.md`) |
+| `npm run db:migrate:local` / `db:migrate:remote` | Apply D1 migrations |
+| `npm run db:seed:local` | Reset + seed LOCAL D1 with demo data |
+| `npm run admin:create` | Create/reset a Team Console login (hidden password prompt) |
+| `npm test` | Unit tests + D1 integration tests (real local D1) |
+| `npm run test:e2e` | Playwright browser flows |
+| `npm run typecheck` | `next typegen && tsc --noEmit` |
 
 ## Architecture
 
@@ -138,9 +144,15 @@ src/
     ui/                        Pill, Toggle, Modal, SlideOver, Toast
     Icon.tsx                   feather-style SVG icons
   lib/                         money, rates, schedule, dates, auth, session,
-                               password, audit, ratelimit, http, validation
-  server/                     view-model loaders + lifecycle services (server-only)
-prisma/                       schema + migrations + seed
+                               password(-core), audit, ratelimit, http, validation
+  server/
+    db/                        D1 types, binding access, typed read queries
+    lifecycle.ts               every management write, each one atomic batch
+    portal.ts team.ts shell.ts view-model loaders (server-only)
+migrations/                    D1 schema (wrangler d1 migrations)
+scripts/                       seed-local.ts (local only), create-admin.ts
+worker.ts                      Worker entry: HTTPS redirect + OpenNext handler
+wrangler.jsonc                 Worker, route, D1 binding
 ```
 
 - **Money** is integer cents; **rates** are basis points. All formatting lives in
@@ -148,7 +160,9 @@ prisma/                       schema + migrations + seed
 - **View-models** (`src/server/*`) are the typed contract between server pages and
   view components; pages stay thin (`getPortalFrame()` / `getTeamFrame()`).
 - **Mutations** go through real API routes that enforce auth + authorization +
-  CSRF on every call and write audit records for sensitive actions.
+  CSRF on every call. Each one is a single D1 batch with its audit records, so
+  a failure or a concurrent request can never leave half a change (D1 has no
+  interactive transactions; see `src/server/lifecycle.ts`).
 
 ## Key flows (end-to-end, through real APIs)
 
@@ -167,11 +181,14 @@ prisma/                       schema + migrations + seed
 
 ## Compliance & security
 
-- Hashed passwords (Argon2id), DB-backed sessions, lockout + rate limiting,
-  same-origin CSRF checks, strict CSP and security headers.
+- scrypt-hashed passwords (N=2^15, r=8, p=3), DB-backed sessions, atomic
+  lockout, a shared D1 login throttle, same-origin CSRF checks, strict CSP and
+  security headers, HTTP→HTTPS redirect at the Worker.
+- Client IPs come only from Cloudflare's `CF-Connecting-IP`; a visitor's
+  `X-Forwarded-For` is never trusted.
 - Server-side authorization on every endpoint; investors are scoped to their own
   data, team by role. No client-side role trust.
-- Immutable **audit log** for logins, state changes, note-term updates,
+- Append-only **audit log** (database triggers reject UPDATE/DELETE) for logins, state changes, note-term updates,
   credential provisioning, password changes, profile and banking edits,
   impersonation, and downloads.
 - Documents are private — downloads require session + ownership, with a
@@ -179,9 +196,7 @@ prisma/                       schema + migrations + seed
 - Copy honors the brief: "ACG Promissory Note," "fixed for the term — not
   guaranteed."
 
-See **`CLOUDFLARE_CONTAINERS_DEPLOY.md`** for production on ACG's domain
-(Cloudflare Containers + managed Postgres), **`CLOUDFLARE_DEPLOY.md`** for the
-self-hosted Docker + Cloudflare Tunnel alternative,
-**`STAGING_DEPLOY.md`** for a staging copy, and **`DEPLOY.md`** for other hosts,
-secrets, migrations, backups, and the pre-launch compliance checklist. Coding
+See **`DEPLOY.md`** for production on `portal.acgroupinc.com` (Cloudflare
+Workers + D1): migrations, secrets, the first-admin bootstrap, deployment,
+verification, operations and the pre-launch compliance checklist. Coding
 agents: start with **`AGENTS.md`**.

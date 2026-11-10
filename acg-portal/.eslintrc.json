@@ -3,5 +3,5 @@
   "rules": {
     "@next/next/no-img-element": "off"
   },
-  "ignorePatterns": ["tests-e2e/**", "prisma/seed.ts", "cloudflare/**"]
+  "ignorePatterns": ["tests-e2e/**", ".open-next/**", ".wrangler/**"]
 }

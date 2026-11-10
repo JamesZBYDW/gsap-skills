@@ -1,5 +1,5 @@
 // ACG Investor Portal — Cloudflare Workers (OpenNext) + D1.
-// Secrets (DOCUMENT_URL_SECRET, SESSION_SECRET) are Worker secrets set with
+// Secrets (DOCUMENT_URL_SECRET) are Worker secrets set with
 // `wrangler secret put` — never in this file. Runbook: DEPLOY.md
 {
   "$schema": "node_modules/wrangler/config-schema.json",

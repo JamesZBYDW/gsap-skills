@@ -1,4 +1,4 @@
 # Local secrets for `wrangler dev` / `npm run preview` (copy to .dev.vars).
 # Production values are Worker secrets: `npx wrangler secret put <NAME>`.
+# Signs short-lived document links (32+ chars; without it they are disabled).
 DOCUMENT_URL_SECRET="dev-only-document-url-secret-change-me-0123456789"
-SESSION_SECRET="dev-only-reserved-session-secret-change-me-0123456789"

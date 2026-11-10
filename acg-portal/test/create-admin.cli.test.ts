@@ -17,11 +17,12 @@ const sql = <T = Record<string, unknown>>(command: string): T[] => {
   if (r.status !== 0) throw new Error(r.stderr);
   return (JSON.parse(r.stdout) as Array<{ results: T[] }>)[0]!.results;
 };
-const admin = (email: string, name: string, password: string, extra: string[] = []) =>
+const admin = (email: string, name: string, password: string, extra: string[] = [], env: Record<string, string> = {}) =>
   spawnSync('npx', ['tsx', 'scripts/create-admin.ts', '--local', '--persist-to', dir, '--email', email, '--name', name, ...extra], {
     cwd: root,
     input: `${password}\n`,
     encoding: 'utf8',
+    env: { ...process.env, ...env },
   });
 
 beforeAll(() => {
@@ -61,6 +62,17 @@ describe('create-admin CLI', () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/Team login updated/);
     expect(sql(`SELECT id FROM sessions WHERE user_id = '${u!.id}'`)).toHaveLength(0);
+  }, 120_000);
+
+  it('stays correct and silent under an inherited WRANGLER_LOG=debug', () => {
+    const r = admin('debug@example.com', 'Debug Person', 'Inherited2026debugpw', [], { WRANGLER_LOG: 'debug' });
+    expect(r.status).toBe(0);
+    const [u] = sql<{ password_hash: string }>("SELECT password_hash FROM users WHERE email = 'debug@example.com'");
+    for (const text of [r.stdout, r.stderr]) {
+      expect(text).not.toContain('Inherited2026debugpw');
+      expect(text).not.toContain(u!.password_hash);
+      expect(text).not.toMatch(/INSERT INTO users/);
+    }
   }, 120_000);
 
   it('refuses an email that belongs to an investor login and changes nothing', () => {
