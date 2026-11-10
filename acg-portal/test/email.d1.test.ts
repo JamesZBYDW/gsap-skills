@@ -47,7 +47,7 @@ describe('transactional portal email with local D1 and simulated provider', () =
     const transport = send();
     await Promise.all([runPortalEmail(env(transport), () => now), runPortalEmail(env(transport), () => now)]);
     expect(transport).toHaveBeenCalledTimes(1);
-    expect(transport.mock.calls[0]![0]).toMatchObject({ to: job.email, subject: expect.stringMatching(/invitation/), text: expect.stringContaining(`https://portal.acg.example/set-password#token=${job.token}`) });
+    expect(transport.mock.calls[0]![0]).toMatchObject({ to: job.email, subject: expect.stringMatching(/invitation/), text: expect.stringContaining(`https://portal.acg.example/set-password#token=${job.token}`), html: expect.stringContaining(`href="https://portal.acg.example/set-password#token=${job.token}"`) });
     expect(await readJob(job.id)).toMatchObject({ state: 'accepted', attempts: 1, provider_id: 'test-provider-receipt' });
   });
 

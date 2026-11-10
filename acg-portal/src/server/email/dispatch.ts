@@ -1,12 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { D1Database } from '../db/d1';
 import { DAY, maturityEmailStatement, passwordEmailToken, utcToday } from './outbox';
+import { renderPortalEmail } from './templates';
 
 interface Message {
   to: string;
   from: string;
   subject: string;
   text: string;
+  html: string;
 }
 
 export interface PortalEmailEnv {
@@ -53,15 +55,7 @@ function eligibility(job: Job, token: string, now: number): { sql: string; args:
 }
 
 function messageFor(job: Job, token: string, origin: string, from: string): Message {
-  const link = `${origin}/set-password#token=${token}`;
-  const messages: Record<Kind, [string, string]> = {
-    invite: ['Your ACG Investor Portal invitation', `Investor Relations has created your portal account. Use this private link to set your password:\n\n${link}`],
-    reset: ['Reset your ACG portal password', `Use this private link to choose a new password:\n\n${link}\n\nIf you did not request a password reset, you can ignore this email.`],
-    payment: ['Distribution recorded in your ACG portal', `Investor Relations has recorded a distribution on your note. Sign in to review it:\n\n${origin}/portal/overview`],
-    maturity: ['Your ACG note is approaching maturity', `Your note is within 90 days of its maturity date. Sign in to review your schedule and contact Investor Relations with any questions:\n\n${origin}/portal/overview`],
-  };
-  const [subject, body] = messages[job.kind];
-  return { from, to: job.recipient, subject, text: `${body}\n\nAmsterdam Capital Group · Investor Relations` };
+  return { from, to: job.recipient, ...renderPortalEmail(job.kind, origin, token) };
 }
 
 const MINUTE = 60_000;
